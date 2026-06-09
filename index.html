@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Desconto — JVM4</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .logo {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg,#1d4ed8,#3b82f6);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 14px; font-weight: 800; letter-spacing: -.5px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 700; color: #0f172a; }
+    header p  { font-size: 12px; color: #94a3b8; margin-top: 1px; }
+
+    /* ── Layout ─────────────────────────────────────── */
+    .page { max-width: 1480px; margin: 0 auto; padding: 20px 28px 40px; }
+
+    /* ── Filter bar ─────────────────────────────────── */
+    .filter-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 20px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      position: relative;
+    }
+    .filter-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+    .sep { width: 1px; height: 24px; background: #e2e8f0; flex-shrink: 0; }
+
+    /* ── Dropdown period selector ────────────────────── */
+    .period-wrap { position: relative; }
+
+    .period-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 8px;
+      border: 1px solid #e2e8f0; background: #f8fafc;
+      font-size: 12px; font-weight: 600; color: #1e293b;
+      cursor: pointer; transition: all .12s; white-space: nowrap;
+      user-select: none;
+    }
+    .period-btn:hover { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+    .period-btn .arrow { font-size: 9px; color: #94a3b8; transition: transform .15s; }
+    .period-btn.open .arrow { transform: rotate(180deg); }
+    .period-btn .count {
+      background: #1d4ed8; color: #fff; border-radius: 10px;
+      padding: 1px 7px; font-size: 11px; font-weight: 700;
+    }
+
+    .period-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.10);
+      z-index: 200;
+      min-width: 320px;
+    }
+    .period-dropdown.open { display: block; }
+
+    .dd-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px; padding-bottom: 10px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .dd-header span { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing:.05em; }
+    .dd-header-actions { display: flex; gap: 10px; }
+
+    .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+    .chip {
+      padding: 4px 11px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+      transition: all .12s; user-select: none;
+    }
+    .chip.on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    .chip:hover:not(.on) { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+    /* ── Segmented control ───────────────────────────── */
+    .seg { display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 2px; }
+    .seg-btn {
+      padding: 5px 14px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600;
+      cursor: pointer; background: transparent; color: #64748b; transition: all .12s;
+    }
+    .seg-btn.on { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+    .link-btn { font-size: 12px; color: #3b82f6; background: none; border: none; cursor: pointer; font-weight: 600; }
+    .link-btn.muted { color: #94a3b8; }
+
+    /* ── KPI Cards ───────────────────────────────────── */
+    .kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 18px; }
+    .kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; }
+    .kpi .lbl { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .kpi .val { font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: -.5px; }
+    .kpi .sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+    .kpi.accent { border-color: #93c5fd; }
+    .kpi.accent .val { color: #1d4ed8; }
+
+    /* ── Chart panel ─────────────────────────────────── */
+    .chart-panel {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+      margin-bottom: 18px; overflow: hidden;
+    }
+    .chart-hd {
+      padding: 14px 18px; border-bottom: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    }
+    .chart-hd h2 { font-size: 13px; font-weight: 700; color: #0f172a; }
+    .chart-body { padding: 20px 18px 16px; }
+    .chart-container { position: relative; height: 260px; }
+
+    .chart-cat-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .chart-cat-tab {
+      padding: 4px 11px; border-radius: 6px; font-size: 11px; font-weight: 700;
+      cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+      transition: all .12s;
+    }
+    .chart-cat-tab.on { color: #fff; }
+    .chart-cat-tab[data-cat="500ml"].on    { background:#1d4ed8; border-color:#1d4ed8; }
+    .chart-cat-tab[data-cat="1500ml"].on   { background:#15803d; border-color:#15803d; }
+    .chart-cat-tab[data-cat="5L"].on       { background:#a16207; border-color:#a16207; }
+    .chart-cat-tab[data-cat="Demais"].on   { background:#7e22ce; border-color:#7e22ce; }
+    .chart-cat-tab[data-cat="500ml-VD"].on { background:#be123c; border-color:#be123c; }
+
+    /* ── Main grid ───────────────────────────────────── */
+    .grid2 { display: grid; grid-template-columns: 400px 1fr; gap: 16px; align-items: start; }
+
+    /* ── Panel ───────────────────────────────────────── */
+    .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+    .panel-hd {
+      padding: 14px 18px; border-bottom: 1px solid #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel-hd h2 { font-size: 13px; font-weight: 700; color: #0f172a; }
+    .panel-hd span { font-size: 11px; color: #94a3b8; }
+    .panel-bd { padding: 16px 18px; }
+
+    /* ── Scenario tabs ───────────────────────────────── */
+    .scenario-tabs {
+      display: flex; border-bottom: 1px solid #e2e8f0; margin: -16px -18px 16px;
+    }
+    .scenario-tab {
+      flex: 1; padding: 10px 8px; font-size: 12px; font-weight: 600; color: #64748b;
+      text-align: center; cursor: pointer; border-bottom: 2px solid transparent;
+      transition: all .12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      user-select: none;
+    }
+    .scenario-tab:hover:not(.on) { color: #1d4ed8; background: #f8fafc; }
+    .scenario-tab.on { color: #1d4ed8; border-bottom-color: #1d4ed8; background: #eff6ff; }
+    .scenario-tab input {
+      border: none; outline: none; background: transparent; font: inherit;
+      color: inherit; text-align: center; width: 100%; cursor: text;
+    }
+
+    /* ── Category tabs ───────────────────────────────── */
+    .cat-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+    .cat-tab {
+      padding: 4px 11px; border-radius: 6px; font-size: 11px; font-weight: 700;
+      cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+      transition: all .12s;
+    }
+    .cat-tab.on { background: #1e3a8a; border-color: #1e3a8a; color: #fff; }
+
+    /* ── Scale table ─────────────────────────────────── */
+    .sc-table { width: 100%; border-collapse: collapse; }
+    .sc-table th {
+      font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;
+      letter-spacing: .06em; padding: 7px 8px; text-align: left; border-bottom: 1px solid #e2e8f0;
+    }
+    .sc-table td { padding: 5px 8px; border-bottom: 1px solid #f8fafc; vertical-align: middle; }
+    .sc-table tr:last-child td { border-bottom: none; }
+    .sc-table tr.hit td { background: #eff6ff; }
+
+    .num-inp {
+      width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px;
+      font-size: 12px; font-family: 'SF Mono','Consolas',monospace; text-align: right;
+      outline: none; transition: border-color .12s; background: #f8fafc;
+    }
+    .num-inp:focus { border-color: #3b82f6; background: #fff; }
+
+    /* Volume display (formatted) + hidden real input */
+    .vol-display-wrap { position: relative; width: 100%; }
+    .vol-display {
+      width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px;
+      font-size: 12px; font-family: 'SF Mono','Consolas',monospace; text-align: right;
+      background: #f8fafc; color: #1e293b; cursor: text;
+      outline: none; transition: border-color .12s;
+    }
+    .vol-display:focus { border-color: #3b82f6; background: #fff; }
+
+    .tier-num {
+      width: 20px; height: 20px; border-radius: 50%; background: #f1f5f9;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 800; color: #64748b;
+    }
+    .hit .tier-num { background: #1d4ed8; color: #fff; }
+
+    .del-btn {
+      width: 22px; height: 22px; border: none; background: transparent; color: #cbd5e1;
+      cursor: pointer; border-radius: 4px; font-size: 13px; display: flex;
+      align-items: center; justify-content: center; transition: all .12s;
+    }
+    .del-btn:hover { background: #fee2e2; color: #ef4444; }
+
+    .add-tier-btn {
+      width: 100%; margin-top: 10px; padding: 8px; border: 1.5px dashed #e2e8f0;
+      border-radius: 8px; background: transparent; color: #94a3b8; font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: all .12s;
+    }
+    .add-tier-btn:hover { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
+
+    .vol-hint {
+      margin-top: 12px; padding: 10px 12px; background: #f8fafc; border-radius: 8px;
+      font-size: 12px; color: #64748b; border: 1px solid #f1f5f9;
+    }
+    .vol-hint strong { color: #1d4ed8; }
+
+    /* ── Results table ───────────────────────────────── */
+    .res-table { width: 100%; border-collapse: collapse; }
+    .res-table th {
+      font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;
+      letter-spacing: .06em; padding: 10px 14px; text-align: right;
+      border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+    }
+    .res-table th:first-child { text-align: left; }
+    .res-table td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; text-align: right; vertical-align: middle; }
+    .res-table td:first-child { text-align: left; }
+    .res-table tbody tr:hover { background: #f8fafc; }
+    .res-table tfoot td { font-weight: 700; border-top: 2px solid #e2e8f0; border-bottom: none; background: #f8fafc; }
+
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+    .b-500, .b-1500, .b-5l, .b-demais, .b-vd { background:#dbeafe; color:#1d4ed8; }
+
+    .pct-wrap { display:flex; align-items:center; gap:8px; justify-content:flex-end; }
+    .bar-bg { height:5px; width:55px; background:#f1f5f9; border-radius:3px; flex-shrink:0; overflow:hidden; }
+    .bar-fill { height:100%; background:#3b82f6; border-radius:3px; transition:width .3s; }
+
+    /* ── Detail section ──────────────────────────────── */
+    .detail-toggle {
+      width: 100%; margin-top: 16px; padding: 12px 18px; background: #fff;
+      border: 1px solid #e2e8f0; border-radius: 12px; text-align: left;
+      cursor: pointer; font-size: 13px; font-weight: 600; color: #475569;
+      display: flex; justify-content: space-between; align-items: center;
+      transition: background .12s;
+    }
+    .detail-toggle:hover { background: #f8fafc; }
+
+    .detail-wrap { margin-top: 6px; display: none; }
+    .detail-wrap.open { display: block; }
+
+    .tbl-scroll { overflow-x: auto; }
+
+    .mono { font-family: 'SF Mono','Consolas',monospace; }
+    .blue { color: #1d4ed8; }
+    .muted { color: #94a3b8; }
+
+    /* ── Growth stepper ──────────────────────────────── */
+    .growth-wrap {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .growth-wrap .filter-label { margin-right: 2px; }
+    .growth-stepper {
+      display: flex; align-items: center;
+      border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #f8fafc;
+    }
+    .growth-stepper button {
+      width: 28px; height: 30px; border: none; background: transparent;
+      font-size: 16px; color: #64748b; cursor: pointer; transition: all .12s;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .growth-stepper button:hover { background: #e2e8f0; color: #1d4ed8; }
+    .growth-inp {
+      width: 46px; border: none; background: transparent; text-align: center;
+      font-size: 13px; font-weight: 700; color: #1e293b; outline: none;
+      font-family: 'SF Mono','Consolas',monospace; padding: 0;
+    }
+    .growth-unit { font-size: 12px; font-weight: 700; color: #94a3b8; padding-right: 8px; }
+    .growth-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+      background: #dcfce7; color: #15803d;
+    }
+    .growth-badge.neg { background: #fee2e2; color: #dc2626; }
+    .growth-badge.zero { background: #f1f5f9; color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo" style="font-size:11px;letter-spacing:-.3px;">JVM4</div>
+  <div>
+    <h1>Simulador de Escala de Descontos</h1>
+    <p>JVM4 &mdash; Histórico Abr/2025 a Abr/2026</p>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- FILTER BAR -->
+  <div class="filter-card" id="filterCard">
+    <span class="filter-label">Período</span>
+
+    <!-- Dropdown button -->
+    <div class="period-wrap">
+      <div class="period-btn" id="periodBtn" onclick="toggleDropdown(event)">
+        <span id="periodLabel">13 meses</span>
+        <span class="count" id="periodCount">13</span>
+        <span class="arrow">&#9660;</span>
+      </div>
+      <div class="period-dropdown" id="periodDropdown">
+        <div class="dd-header">
+          <span>Selecionar meses</span>
+          <div class="dd-header-actions">
+            <button class="link-btn" onclick="selAll()">Todos</button>
+            <button class="link-btn muted" onclick="selNone()">Nenhum</button>
+          </div>
+        </div>
+        <div class="chips" id="monthChips"></div>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+    <div class="seg">
+      <button class="seg-btn on" id="btnMes"  onclick="setMode('mensal')"   >Por mês</button>
+      <button class="seg-btn"   id="btnAcum" onclick="setMode('acumulado')">Acumulado</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="growth-wrap">
+      <span class="filter-label">Crescimento</span>
+      <div class="growth-stepper">
+        <button onclick="stepGrowth(-5)">−</button>
+        <input class="growth-inp" id="growthInp" type="number" value="0" step="5"
+               onchange="setGrowth(this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+        <span class="growth-unit">%</span>
+        <button onclick="stepGrowth(+5)">+</button>
+      </div>
+      <span class="growth-badge zero" id="growthBadge">sem crescimento</span>
+    </div>
+  </div>
+
+  <!-- KPI ROW -->
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <!-- CHART PANEL -->
+  <div class="chart-panel">
+    <div class="chart-hd" style="cursor:pointer;" onclick="toggleChart()">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="chartArrow" style="font-size:11px;color:#94a3b8;">&#9654;</span>
+        <h2>Oscilação de Volume por Mês</h2>
+        <span style="font-size:11px;color:#94a3b8;" id="chartHint">clique para expandir</span>
+      </div>
+      <div id="chartCatTabsWrap" style="display:none;">
+        <div class="chart-cat-tabs" id="chartCatTabs"></div>
+      </div>
+    </div>
+    <div class="chart-body" id="chartBody" style="display:none;">
+      <div class="chart-container">
+        <canvas id="volChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="grid2">
+
+    <!-- LEFT: SCALE EDITOR -->
+    <div class="panel">
+      <div class="panel-hd">
+        <h2>Escala de Descontos</h2>
+        <span>Edite volumes e percentuais</span>
+      </div>
+      <div class="panel-bd">
+        <div class="scenario-tabs" id="scenarioTabs"></div>
+        <div class="cat-tabs" id="catTabs"></div>
+        <div id="scaleEditor"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: RESULTS -->
+    <div class="panel">
+      <div class="panel-hd">
+        <h2>Resultado por Categoria</h2>
+        <span id="resSub"></span>
+      </div>
+      <div class="tbl-scroll">
+        <table class="res-table">
+          <thead>
+            <tr>
+              <th style="text-align:left">Categoria</th>
+              <th>Volume</th>
+              <th>Desc. %</th>
+              <th>Rec. JVM4 Bruta</th>
+              <th>Desconto R$</th>
+              <th>Rec. JVM4 Líquida</th>
+            </tr>
+          </thead>
+          <tbody id="resBody"></tbody>
+          <tfoot id="resFoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL TOGGLE -->
+  <button class="detail-toggle" onclick="toggleDetail()">
+    <span>&#9660; Detalhamento mensal por categoria</span>
+    <span id="detArrow"></span>
+  </button>
+  <div class="detail-wrap panel" id="detailWrap">
+    <div class="tbl-scroll">
+      <table class="res-table" id="detailTbl"></table>
+    </div>
+  </div>
+
+</div>
+
+<!-- DATA -->
+<script src="dadosRaw.js"></script>
+
+<script>
+Chart.register(ChartDataLabels);
+
+// ============================================================
+// STATIC DATA
+// ============================================================
+const servico = {
+  "PET AGUA MINERAL S/GAS  350 ML"             : 3.3327,
+  "PET AGUA MINERAL C/GAS  350 ML"             : 3.61215,
+  "PET AGUA MINERAL S/GAS  500 ML"             : 3.32235,
+  "PET AGUA MINERAL C/GAS  500 ML"             : 3.50865,
+  "PET AGUA MINERAL SW 500 ML"                 : 3.2706,
+  "PET AGUA MINERAL S/GAS  1500 ML"            : 2.63925,
+  "PET AGUA MINERAL C/GAS  1500 ML"            : 2.86695,
+  "PET AGUA MINERAL S/GAS  5 LT C/4 UM"       : 3.2913,
+  "PET ÁGUA MINERAL S/GAS 500 PREMIUM"         : 1.71,
+  "PET ÁGUA MINERAL C/GAS 500 PREMIUM"         : 1.79,
+  "PET AGUA MINERAL 10 LT - DESCARTAVEL"       : 2.14,
+  "COPO AGUA MINERAL 200 ML"                   : 3.21,
+  "PET   500 ML S/GÁS, DA GUARDA"             : 3.32235,
+  "PET   500 ML C/GÁS, DA GUARDA"             : 3.50865,
+  "PET 1500 ML S/GÁS, DA GUARDA"              : 2.63925,
+  "PET 1500 ML C/GÁS, DA GUARDA"              : 2.86695,
+  "PET 5000 ML S/GÁS, DA GUARDA"              : 3.2913,
+  "PET 10 LTS - DESCARTAVEL, DA GUARDA"       : 2.14,
+  "COPO 200 ML, DA GUARDA"                     : 3.21,
+  "AGUA PURA- 500ML SEM"                       : 2.32,
+  "AGUA PURA- 500ML COM"                       : 2.38,
+  "AGUA PURA- 1500ML SEM"                      : 2.63925,
+  "AGUA PURA- 1500ML COM"                      : 2.86695,
+  "AGUA PURA- 5 LITROS"                        : 3.2913,
+  "ZAFFARI - PET 500ML SEM GÁS -  IMPERATRIZ" : 2.32,
+  "ZAFFARI - PET 500ML COM GÁS - IMPERATRIZ"  : 2.38,
+  "ZAFFARI - PET 1500ML SEM GÁS -  IMPERATRIZ": 2.63925,
+  "ZAFFARI - PET 1500ML COM GÁS - IMPERATRIZ" : 2.86695,
+  "ZAFFARI - PET 5L  - IMPERATRIZ"            : 3.2913,
+  "ZUPPA PET 500 ML SEM GAS"                  : 2.32,
+  "ZUPPA PET 500 ML COM GAS"                  : 2.38,
+  "ZUPPA PET 1500 ML SEM GAS"                 : 2.63925,
+  "ZUPPA PET 1500 ML COM GAS"                 : 2.86695,
+  "ZUPPA PET 5LT SEM GAS"                     : 3.2913,
+  "AMPM - PET 500ML SEM GÁS -  IMPERATRIZ"   : 2.32,
+  "AMPM - PET 500ML COM GÁS - IMPERATRIZ"     : 2.38,
+  "AMPM - PET 1500ML SEM GÁS -  IMPERATRIZ"  : 2.63925,
+  "AMPM - PET 1500ML COM GÁS - IMPERATRIZ"   : 2.86695,
+  "AMPM - PET 5L  - IMPERATRIZ"              : 3.2913,
+};
+
+const scenarios = [
+  {
+    name: 'Cenário 1',
+    escala: {
+      "500ml"   : [{v:150000,p:9.6},{v:175000,p:12},{v:200000,p:14.4},{v:225000,p:16.8},{v:250000,p:19.2},{v:275000,p:21},{v:300000,p:22.8},{v:325000,p:24.24},{v:350000,p:25.68},{v:375000,p:27.48},{v:400000,p:29.28},{v:425000,p:31.68},{v:450000,p:34.08}],
+      "1500ml"  : [{v:50000,p:10},{v:70000,p:10},{v:90000,p:10},{v:100000,p:10},{v:110000,p:10},{v:120000,p:10},{v:130000,p:10}],
+      "5L"      : [{v:40000,p:10},{v:50000,p:10},{v:60000,p:10},{v:70000,p:10},{v:80000,p:10},{v:90000,p:10},{v:100000,p:10}],
+      "Demais"  : [{v:60000,p:8},{v:70000,p:8},{v:80000,p:8},{v:90000,p:8},{v:100000,p:8},{v:110000,p:8},{v:120000,p:8}],
+      "500ml-VD": [{v:100000,p:0},{v:120000,p:0},{v:140000,p:0},{v:160000,p:0},{v:180000,p:0},{v:200000,p:0}]
+    }
+  },
+  {
+    name: 'Cenário 2',
+    escala: {
+      "500ml"   : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:14},{v:225000,p:16},{v:250000,p:18},{v:275000,p:20},{v:300000,p:22},{v:325000,p:24},{v:350000,p:26},{v:375000,p:28},{v:400000,p:30},{v:425000,p:32},{v:450000,p:35}],
+      "1500ml"  : [{v:50000,p:10},{v:70000,p:12},{v:90000,p:14},{v:100000,p:16},{v:110000,p:18},{v:120000,p:20},{v:130000,p:22}],
+      "5L"      : [{v:40000,p:10},{v:50000,p:12},{v:60000,p:14},{v:70000,p:16},{v:80000,p:18},{v:90000,p:20},{v:100000,p:22}],
+      "Demais"  : [{v:60000,p:8},{v:70000,p:9},{v:80000,p:10},{v:90000,p:11},{v:100000,p:12},{v:110000,p:13},{v:120000,p:14}],
+      "500ml-VD": [{v:100000,p:10},{v:120000,p:12},{v:140000,p:13},{v:160000,p:14},{v:180000,p:15},{v:200000,p:16}]
+    }
+  },
+  {
+    name: 'Cenário 3',
+    escala: {
+      "500ml"   : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:18},{v:225000,p:20},{v:250000,p:24},{v:275000,p:26},{v:300000,p:28},{v:325000,p:30},{v:350000,p:34},{v:375000,p:36},{v:400000,p:40},{v:425000,p:42},{v:450000,p:44}],
+      "1500ml"  : [{v:50000,p:10},{v:70000,p:15},{v:90000,p:18},{v:100000,p:20},{v:110000,p:22},{v:120000,p:23},{v:130000,p:24}],
+      "5L"      : [{v:40000,p:10},{v:50000,p:12},{v:60000,p:15},{v:70000,p:18},{v:80000,p:20},{v:90000,p:22},{v:100000,p:25}],
+      "Demais"  : [{v:60000,p:10},{v:70000,p:12},{v:80000,p:14},{v:90000,p:16},{v:100000,p:18},{v:110000,p:20},{v:120000,p:22}],
+      "500ml-VD": [{v:100000,p:10},{v:120000,p:12},{v:140000,p:13},{v:160000,p:14},{v:180000,p:15},{v:200000,p:16}]
+    }
+  }
+];
+
+let activeScenario = 0;
+const escala = () => scenarios[activeScenario].escala;
+
+const CATS    = ["500ml","1500ml","5L","Demais","500ml-VD"];
+const CAT_CLS = {"500ml":"b-500","1500ml":"b-1500","5L":"b-5l","Demais":"b-demais","500ml-VD":"b-vd"};
+const CAT_COLOR = {
+  "500ml"   :"#1d4ed8",
+  "1500ml"  :"#15803d",
+  "5L"      :"#a16207",
+  "Demais"  :"#7e22ce",
+  "500ml-VD":"#be123c"
+};
+
+const allMonths = [...new Set(dadosRaw.map(d => d.data))];
+
+// ── State ──────────────────────────────────────────
+let selMonths  = new Set(allMonths);
+let mode       = 'mensal';
+let activeCat  = '500ml';
+let chartCat   = '500ml';
+let detOpen    = false;
+let ddOpen     = false;
+let volChart   = null;
+let chartOpen  = false;
+let growthPct  = 0;
+
+// ============================================================
+// BOOT
+// ============================================================
+function init() {
+  renderChips();
+  renderScenarioTabs();
+  renderCatTabs();
+  renderChartCatTabs();
+  run();
+
+  // Close dropdown on outside click
+  document.addEventListener('click', e => {
+    if (!document.getElementById('filterCard').contains(e.target)) {
+      closeDropdown();
+    }
+  });
+}
+
+// ============================================================
+// GROWTH
+// ============================================================
+function stepGrowth(delta) {
+  growthPct = Math.max(-50, Math.min(200, growthPct + delta));
+  document.getElementById('growthInp').value = growthPct;
+  updateGrowthBadge();
+  run();
+}
+function setGrowth(val) {
+  growthPct = Math.max(-50, Math.min(200, parseFloat(val) || 0));
+  document.getElementById('growthInp').value = growthPct;
+  updateGrowthBadge();
+  run();
+}
+function updateGrowthBadge() {
+  const el = document.getElementById('growthBadge');
+  if (growthPct === 0) {
+    el.className = 'growth-badge zero';
+    el.textContent = 'sem crescimento';
+  } else if (growthPct > 0) {
+    el.className = 'growth-badge';
+    el.textContent = `+${growthPct}% volume`;
+  } else {
+    el.className = 'growth-badge neg';
+    el.textContent = `${growthPct}% volume`;
+  }
+}
+
+// ============================================================
+// DROPDOWN
+// ============================================================
+function toggleDropdown(e) {
+  e.stopPropagation();
+  ddOpen = !ddOpen;
+  document.getElementById('periodDropdown').classList.toggle('open', ddOpen);
+  document.getElementById('periodBtn').classList.toggle('open', ddOpen);
+}
+function closeDropdown() {
+  ddOpen = false;
+  document.getElementById('periodDropdown').classList.remove('open');
+  document.getElementById('periodBtn').classList.remove('open');
+}
+
+function updatePeriodLabel() {
+  const n = selMonths.size;
+  document.getElementById('periodCount').textContent = n;
+  document.getElementById('periodLabel').textContent =
+    n === allMonths.length ? 'Todos os meses' :
+    n === 0               ? 'Nenhum mês'      :
+    n === 1               ? [...selMonths][0]  :
+                            `${n} meses`;
+}
+
+// ============================================================
+// CHIPS
+// ============================================================
+function renderChips() {
+  document.getElementById('monthChips').innerHTML =
+    allMonths.map(m =>
+      `<div class="chip ${selMonths.has(m)?'on':''}" onclick="togMonth('${m}')">${m}</div>`
+    ).join('');
+  updatePeriodLabel();
+}
+
+function togMonth(m) {
+  selMonths.has(m) ? selMonths.delete(m) : selMonths.add(m);
+  renderChips();
+  run();
+}
+function selAll()  { selMonths = new Set(allMonths); renderChips(); run(); }
+function selNone() { selMonths = new Set();           renderChips(); run(); }
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btnMes') .classList.toggle('on', m==='mensal');
+  document.getElementById('btnAcum').classList.toggle('on', m==='acumulado');
+  run();
+}
+
+// ============================================================
+// SCENARIO TABS
+// ============================================================
+function renderScenarioTabs() {
+  document.getElementById('scenarioTabs').innerHTML = scenarios.map((s, i) => `
+    <div class="scenario-tab ${i===activeScenario?'on':''}"
+         onclick="setScenario(${i})"
+         ondblclick="renameScenario(${i}, this)">
+      ${s.name}
+    </div>`).join('');
+}
+
+function setScenario(i) {
+  activeScenario = i;
+  renderScenarioTabs();
+  renderEditor();
+  run();
+}
+
+function renameScenario(i, el) {
+  const current = scenarios[i].name;
+  const input = document.createElement('input');
+  input.value = current;
+  input.style.width = '100%';
+  el.textContent = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+  function save() {
+    const val = input.value.trim() || current;
+    scenarios[i].name = val;
+    renderScenarioTabs();
+  }
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => { if(e.key==='Enter') input.blur(); });
+}
+
+// ============================================================
+// CAT TABS (scale editor)
+// ============================================================
+function renderCatTabs() {
+  document.getElementById('catTabs').innerHTML =
+    CATS.map(c =>
+      `<div class="cat-tab ${c===activeCat?'on':''}" onclick="setcat('${c}')">${c}</div>`
+    ).join('');
+}
+function setcat(c) { activeCat = c; renderCatTabs(); renderEditor(); }
+
+// ============================================================
+// CHART CAT TABS
+// ============================================================
+function renderChartCatTabs() {
+  document.getElementById('chartCatTabs').innerHTML =
+    CATS.map(c =>
+      `<div class="chart-cat-tab ${c===chartCat?'on':''}" data-cat="${c}" onclick="setChartCat('${c}')">${c}</div>`
+    ).join('');
+}
+function setChartCat(c) {
+  chartCat = c;
+  renderChartCatTabs();
+  renderChart();
+}
+
+// ============================================================
+// SCALE EDITOR
+// ============================================================
+function renderEditor() {
+  const tiers = escala()[activeCat];
+  const filtered = dadosRaw.filter(d => selMonths.has(d.data) && d.classif === activeCat);
+
+  const gm = 1 + growthPct / 100;
+  let refVol;
+  if (mode === 'acumulado') {
+    refVol = filtered.reduce((s,d) => s + d.volume * gm, 0);
+  } else {
+    const byM = {};
+    filtered.forEach(d => { byM[d.data] = (byM[d.data]||0) + d.volume * gm; });
+    const vals = Object.values(byM);
+    refVol = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+  }
+
+  const hitIdx = activeTierIdx(activeCat, refVol);
+  const sIdx   = activeScenario;
+
+  document.getElementById('scaleEditor').innerHTML = `
+    <table class="sc-table">
+      <thead><tr>
+        <th style="width:26px">#</th>
+        <th>Vol. Mínimo</th>
+        <th style="width:90px">Desconto %</th>
+        <th style="width:28px"></th>
+      </tr></thead>
+      <tbody>
+        ${tiers.map((t,i) => `
+          <tr class="${i===hitIdx?'hit':''}">
+            <td><span class="tier-num">${i+1}</span></td>
+            <td><input class="vol-display" type="text"
+                 value="${t.v.toLocaleString('pt-BR')}"
+                 onblur="fmtVolInput(this,${sIdx},'${activeCat}',${i})"
+                 onfocus="this.value=this.value.replace(/\\./g,'')"
+                 onkeydown="if(event.key==='Enter')this.blur()"></td>
+            <td><input class="num-inp" type="number" value="${t.p}" min="0" max="100" step="0.5"
+                 style="color:#1d4ed8;font-weight:700"
+                 onchange="updTier(${sIdx},'${activeCat}',${i},'p',this.value)"></td>
+            <td><button class="del-btn" onclick="delTier(${sIdx},'${activeCat}',${i})">✕</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <button class="add-tier-btn" onclick="addTier(${sIdx},'${activeCat}')">+ Adicionar faixa</button>
+    <div class="vol-hint">
+      Vol. ${mode==='acumulado'?'acumulado':'médio mensal'}: <strong>${fmt(refVol)} un.</strong>
+      &nbsp;→&nbsp;
+      ${hitIdx>=0
+        ? `<strong>${tiers[hitIdx].p}% de desconto</strong>`
+        : '<span class="muted">Abaixo da 1ª faixa (sem desconto)</span>'}
+    </div>`;
+}
+
+function fmtVolInput(el, sIdx, cat, i) {
+  const raw = parseFloat(el.value.replace(/\./g,'').replace(',','.')) || 0;
+  scenarios[sIdx].escala[cat][i].v = raw;
+  el.value = raw.toLocaleString('pt-BR');
+  renderEditor();
+  run();
+}
+
+function updTier(sIdx, cat, i, field, val) {
+  scenarios[sIdx].escala[cat][i][field] = parseFloat(val)||0;
+  renderEditor(); run();
+}
+function delTier(sIdx, cat, i) {
+  scenarios[sIdx].escala[cat].splice(i,1);
+  renderEditor(); run();
+}
+function addTier(sIdx, cat) {
+  const t = scenarios[sIdx].escala[cat];
+  t.push({ v: t.length ? t[t.length-1].v+25000 : 0, p: t.length ? t[t.length-1].p+2 : 5 });
+  renderEditor(); run();
+}
+
+// ============================================================
+// CHART TOGGLE
+// ============================================================
+function toggleChart() {
+  chartOpen = !chartOpen;
+  document.getElementById('chartBody').style.display        = chartOpen ? 'block' : 'none';
+  document.getElementById('chartCatTabsWrap').style.display = chartOpen ? 'block' : 'none';
+  document.getElementById('chartArrow').innerHTML           = chartOpen ? '&#9660;' : '&#9654;';
+  document.getElementById('chartHint').textContent          = chartOpen ? 'clique para minimizar' : 'clique para expandir';
+  if (chartOpen) renderChart();
+}
+
+// ============================================================
+// CHART
+// ============================================================
+function renderChart() {
+  if (!chartOpen) return;
+  const color  = CAT_COLOR[chartCat];
+  const colorA = color + '22'; // transparent fill
+
+  // Build volume per month for this category (always all 13 months)
+  const labels   = allMonths;
+  const dataReal = allMonths.map(m =>
+    dadosRaw.filter(d => d.data === m && d.classif === chartCat)
+            .reduce((s,d) => s+d.volume, 0)
+  );
+  const gMult    = 1 + growthPct / 100;
+  const dataProj = growthPct !== 0 ? dataReal.map(v => Math.round(v * gMult)) : null;
+
+  if (volChart) volChart.destroy();
+
+  const datasets = [{
+    label: 'Realizado',
+    data: dataReal,
+    borderColor: color,
+    backgroundColor: colorA,
+    borderWidth: 2.5,
+    pointBackgroundColor: color,
+    pointRadius: 5,
+    pointHoverRadius: 7,
+    fill: true,
+    tension: 0.35,
+  }];
+
+  if (dataProj) {
+    datasets.push({
+      label: `Projetado (${growthPct>0?'+':''}${growthPct}%)`,
+      data: dataProj,
+      borderColor: '#10b981',
+      backgroundColor: '#10b98115',
+      borderWidth: 2,
+      borderDash: [5,4],
+      pointBackgroundColor: '#10b981',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      fill: false,
+      tension: 0.35,
+    });
+  }
+
+  volChart = new Chart(document.getElementById('volChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 28 } },
+      plugins: {
+        legend: { display: dataProj !== null },
+        tooltip: {
+          callbacks: {
+            label: ctx => ' ' + fmt(ctx.raw) + ' un.'
+          }
+        },
+        datalabels: {
+          display: true,
+          formatter: v => fmt(v),
+          font: { weight: 700, size: 10, family: "'SF Mono','Consolas',monospace" },
+          align: ctx => ctx.datasetIndex === 0 ? 'top' : 'bottom',
+          anchor: ctx => ctx.datasetIndex === 0 ? 'end' : 'start',
+          color: ctx => ctx.datasetIndex === 0 ? color : '#10b981',
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 11 }, color: '#94a3b8' }
+        },
+        y: {
+          grid: { color: '#f1f5f9' },
+          ticks: {
+            font: { size: 11 }, color: '#94a3b8',
+            callback: v => fmt(v)
+          },
+          beginAtZero: false
+        }
+      }
+    }
+  });
+}
+
+// ============================================================
+// CALCULATION ENGINE
+// ============================================================
+function activeTierIdx(classif, volume) {
+  const tiers = escala()[classif] || [];
+  let best = -1, bestVol = -1;
+  tiers.forEach((t,i) => { if(volume >= t.v && t.v >= bestVol){ best=i; bestVol=t.v; }});
+  return best;
+}
+function getDiscount(classif, volume) {
+  const i = activeTierIdx(classif, volume);
+  return i>=0 ? escala()[classif][i].p/100 : 0;
+}
+
+function run() {
+  const data = dadosRaw.filter(d => selMonths.has(d.data));
+
+  const catVol = {}, catRev = {}, catDesc = {};
+  CATS.forEach(c => { catVol[c]=0; catRev[c]=0; catDesc[c]=0; });
+
+  const monthlyData = {};
+  const months = [...selMonths].sort((a,b) => allMonths.indexOf(a) - allMonths.indexOf(b));
+
+  months.forEach(m => {
+    monthlyData[m] = {};
+    CATS.forEach(c => { monthlyData[m][c] = {vol:0,rev:0,desc:0}; });
+  });
+
+  const gMult = 1 + growthPct / 100;
+
+  if (mode === 'acumulado') {
+    data.forEach(row => {
+      const price = servico[row.produto] || 0;
+      const vol   = row.volume * gMult;
+      catVol[row.classif] += vol;
+      catRev[row.classif] += vol * price;
+    });
+    CATS.forEach(c => {
+      catDesc[c] = catRev[c] * getDiscount(c, catVol[c]);
+    });
+  } else {
+    months.forEach(m => {
+      const mRows = data.filter(d => d.data===m);
+      CATS.forEach(c => {
+        const rows = mRows.filter(d => d.classif===c);
+        const vol  = rows.reduce((s,d) => s + d.volume * gMult, 0);
+        const rev  = rows.reduce((s,d) => s + d.volume * gMult * (servico[d.produto]||0), 0);
+        const desc = rev * getDiscount(c, vol);
+        monthlyData[m][c] = {vol, rev, desc};
+        catVol[c]  += vol;
+        catRev[c]  += rev;
+        catDesc[c] += desc;
+      });
+    });
+  }
+
+  renderKPI(catVol, catRev, catDesc, months.length);
+  renderResults(catVol, catRev, catDesc);
+  renderEditor();
+  renderChart();
+  if (detOpen) renderDetail(monthlyData, months);
+}
+
+// ============================================================
+// RENDER KPI
+// ============================================================
+function renderKPI(catVol, catRev, catDesc, nMonths) {
+  const tVol  = sum(catVol);
+  const tRev  = sum(catRev);
+  const tDesc = sum(catDesc);
+  const pct   = tRev>0 ? tDesc/tRev*100 : 0;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi">
+      <div class="lbl">Volume Total</div>
+      <div class="val mono">${fmt(tVol)}</div>
+      <div class="sub">${nMonths} mês(es) selecionado(s)</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Receita JVM4 Bruta</div>
+      <div class="val">${R(tRev)}</div>
+      <div class="sub">valor de serviço total</div>
+    </div>
+    <div class="kpi accent">
+      <div class="lbl">Desconto Total</div>
+      <div class="val">${R(tDesc)}</div>
+      <div class="sub">${pct.toFixed(1)}% sobre receita JVM4 bruta</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Receita JVM4 Líquida</div>
+      <div class="val">${R(tRev-tDesc)}</div>
+      <div class="sub">após descontos simulados</div>
+    </div>`;
+
+  document.getElementById('resSub').textContent =
+    `${selMonths.size} mês(es) | ${mode==='acumulado'?'volume acumulado':'desconto por mês'}`;
+}
+
+// ============================================================
+// RENDER RESULTS TABLE
+// ============================================================
+function renderResults(catVol, catRev, catDesc) {
+  const tVol  = sum(catVol);
+  const tRev  = sum(catRev);
+  const tDesc = sum(catDesc);
+
+  document.getElementById('resBody').innerHTML = CATS.map(c => {
+    const vol  = catVol[c]||0;
+    const rev  = catRev[c]||0;
+    const desc = catDesc[c]||0;
+    const pct  = rev>0 ? desc/rev*100 : 0;
+    return `<tr>
+      <td><span class="badge ${CAT_CLS[c]}">${c}</span></td>
+      <td class="mono">${fmt(vol)}</td>
+      <td>
+        <div class="pct-wrap">
+          <span class="mono ${pct>0?'blue':'muted'}" style="font-weight:700">${pct.toFixed(1)}%</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(pct/35*100,100).toFixed(1)}%"></div></div>
+        </div>
+      </td>
+      <td class="mono">${R(rev)}</td>
+      <td class="mono blue">${R(desc)}</td>
+      <td class="mono">${R(rev-desc)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('resFoot').innerHTML = `<tr>
+    <td><strong>TOTAL</strong></td>
+    <td class="mono">${fmt(tVol)}</td>
+    <td class="mono">${tRev>0?(tDesc/tRev*100).toFixed(1):'0.0'}%</td>
+    <td class="mono">${R(tRev)}</td>
+    <td class="mono blue">${R(tDesc)}</td>
+    <td class="mono">${R(tRev-tDesc)}</td>
+  </tr>`;
+}
+
+// ============================================================
+// RENDER DETAIL TABLE
+// ============================================================
+function renderDetail(monthlyData, months) {
+  const tbl = document.getElementById('detailTbl');
+
+  const hCats = CATS.map(c => `<th colspan="3" style="border-left:1px solid #e2e8f0">${c}</th>`).join('');
+  const hSub  = CATS.map(() =>
+    `<th style="border-left:1px solid #e2e8f0;font-size:9px">Vol.</th>
+     <th style="font-size:9px">Desc%</th>
+     <th style="font-size:9px">Desc R$</th>`).join('');
+
+  const rows = months.map(m => {
+    const cells = CATS.map(c => {
+      const d = (monthlyData[m]||{})[c] || {vol:0,rev:0,desc:0};
+      const pct = d.rev>0 ? d.desc/d.rev*100 : 0;
+      return `<td class="mono" style="border-left:1px solid #f1f5f9">${fmt(d.vol)}</td>
+              <td class="mono ${pct>0?'blue':'muted'}">${pct.toFixed(1)}%</td>
+              <td class="mono blue">${R(d.desc)}</td>`;
+    }).join('');
+    return `<tr><td style="font-weight:600;white-space:nowrap">${m}</td>${cells}</tr>`;
+  }).join('');
+
+  tbl.innerHTML = `
+    <thead>
+      <tr><th style="text-align:left">Mês</th>${hCats}</tr>
+      <tr><th></th>${hSub}</tr>
+    </thead>
+    <tbody>${rows}</tbody>`;
+}
+
+function toggleDetail() {
+  detOpen = !detOpen;
+  document.getElementById('detailWrap').classList.toggle('open', detOpen);
+  document.querySelector('.detail-toggle span:first-child').textContent =
+    (detOpen?'▲':'▼') + ' Detalhamento mensal por categoria';
+  if (detOpen) run();
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function sum(obj) { return Object.values(obj).reduce((a,b)=>a+b,0); }
+function fmt(n)   { return Math.round(n).toLocaleString('pt-BR'); }
+function R(n)     { return 'R$ ' + n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+// ============================================================
+init();
+</script>
+</body>
+</html>
