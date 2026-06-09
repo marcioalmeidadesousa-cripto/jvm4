@@ -6,6 +6,7 @@
   <title>Simulador de Desconto — JVM4</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     /* ── Login overlay ───────────────────────────────── */
     #loginOverlay {
@@ -497,7 +498,14 @@ function doLogin() {
     <div class="panel">
       <div class="panel-hd">
         <h2>Escala de Descontos</h2>
-        <span>Edite volumes e percentuais</span>
+        <button onclick="exportarEscala()" style="
+          display:flex;align-items:center;gap:6px;
+          padding:5px 12px;border-radius:7px;border:1px solid #e2e8f0;
+          background:#f8fafc;color:#1d4ed8;font-size:11px;font-weight:700;
+          cursor:pointer;transition:all .12s;
+        " onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='#f8fafc'">
+          &#8681; Exportar Excel
+        </button>
       </div>
       <div class="panel-bd">
         <div class="scenario-tabs" id="scenarioTabs"></div>
@@ -1166,6 +1174,51 @@ function toggleDetail() {
   document.querySelector('.detail-toggle span:first-child').textContent =
     (detOpen?'▲':'▼') + ' Detalhamento mensal por categoria';
   if (detOpen) run();
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function exportarEscala() {
+  const wb = XLSX.utils.book_new();
+
+  scenarios.forEach(s => {
+    const rows = [
+      ['Categoria', 'Volume Mínimo', 'Desconto %']
+    ];
+
+    CATS.forEach(cat => {
+      const tiers = s.escala[cat] || [];
+      tiers.forEach((t, i) => {
+        rows.push([
+          i === 0 ? cat : '',
+          t.v,
+          t.p / 100
+        ]);
+      });
+      if (tiers.length) rows.push(['', '', '']); // linha em branco entre categorias
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Larguras das colunas
+    ws['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 13 }];
+
+    // Formata coluna C como percentual e coluna B como número inteiro
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let r = 1; r <= range.e.r; r++) {
+      const cellB = ws[XLSX.utils.encode_cell({ r, c: 1 })];
+      const cellC = ws[XLSX.utils.encode_cell({ r, c: 2 })];
+      if (cellB && cellB.v !== '') cellB.z = '#,##0';
+      if (cellC && cellC.v !== '') cellC.z = '0.0%';
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, s.name);
+  });
+
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb, `EscalaDescontos_JVM4_${stamp}.xlsx`);
 }
 
 // ============================================================
