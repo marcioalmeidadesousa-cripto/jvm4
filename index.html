@@ -1335,59 +1335,57 @@ function exportarPDF() {
   const now = new Date();
   const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
   const tsLabel = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+  const s = scenarios[activeScenario];
 
-  function header(pageTitle) {
+  function drawHeader() {
     doc.setFillColor(29, 78, 216);
     doc.rect(0, 0, pageW, 22, 'F');
     doc.setTextColor(255,255,255);
     doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text(pageTitle, mg, 14);
+    doc.text(`JVM4 — ${s.name}`, mg, 14);
     doc.setFont('helvetica','normal'); doc.setFontSize(8);
     doc.text(`Gerado em ${tsLabel}`, pageW - mg, 14, { align:'right' });
   }
 
-  function sectionTitle(title, yPos) {
-    doc.setFillColor(241,245,249);
-    doc.roundedRect(mg, yPos, cW, 8, 1.5, 1.5, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.setTextColor(15,23,42);
-    doc.text(title, mg + 4, yPos + 5.5);
-    return yPos + 12;
-  }
-
-  function footerAll() {
-    const total = doc.internal.getNumberOfPages();
-    for (let p = 1; p <= total; p++) {
-      doc.setPage(p);
-      doc.setFont('helvetica','normal'); doc.setFontSize(7);
-      doc.setTextColor(148,163,184);
-      doc.text(`JVM4 — ${tsLabel} — Página ${p} de ${total}`, pageW/2, pageH - 6, { align:'center' });
+  function checkPage(need) {
+    if (y + need > pageH - 12) {
+      doc.addPage();
+      drawHeader();
+      y = 30;
     }
   }
 
-  // ── PAGE 1: SUMMARY ──────────────────────────────────────
-  header('JVM4 — Simulador de Escala de Descontos');
+  function sectionTitle(title) {
+    checkPage(20);
+    doc.setFillColor(241,245,249);
+    doc.roundedRect(mg, y, cW, 8, 1.5, 1.5, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.setTextColor(15,23,42);
+    doc.text(title, mg + 4, y + 5.5);
+    y += 12;
+  }
+
+  // ── HEADER ───────────────────────────────────────────────
+  drawHeader();
   y = 30;
 
-  // period info
+  // period + mode info
   const monthsInfo = selMonths.size === allMonths.length ? 'Todos os meses' :
                      selMonths.size === 1 ? [...selMonths][0] : `${selMonths.size} meses`;
-  const modeLabel  = mode === 'acumulado' ? 'Acumulado' : 'Por mês';
-  const gInfo      = growthPct !== 0 ? `  |  Crescimento: ${growthPct>0?'+':''}${growthPct}%` : '';
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-  doc.setTextColor(100,116,139);
-  doc.text(`Período: ${monthsInfo}  |  Modo: ${modeLabel}${gInfo}  |  Cenário ativo: ${scenarios[activeScenario].name}`, mg, y);
+  const gInfo = growthPct !== 0 ? `  |  Crescimento: ${growthPct>0?'+':''}${growthPct}%` : '';
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(100,116,139);
+  doc.text(`Período: ${monthsInfo}  |  Modo: ${mode==='acumulado'?'Acumulado':'Por mês'}${gInfo}`, mg, y);
   y += 10;
 
-  // KPI boxes
-  y = sectionTitle('Resumo Geral', y);
-  const tVol  = sum(lastCalc.catVol), tRev  = sum(lastCalc.catRev), tDesc = sum(lastCalc.catDesc);
-  const pctD  = tRev > 0 ? tDesc/tRev*100 : 0;
-  const kpis  = [
-    { l:'VOLUME TOTAL',       v: fmt(tVol),        s:`${lastCalc.nMonths} mês(es)`,        accent:false },
-    { l:'REC. JVM4 BRUTA',    v: R(tRev),           s:'valor de serviço',                  accent:false },
-    { l:'DESCONTO TOTAL',     v: R(tDesc),           s:`${pctD.toFixed(1)}% s/ bruta`,      accent:true  },
-    { l:'REC. JVM4 LÍQUIDA',  v: R(tRev - tDesc),   s:'após descontos simulados',           accent:false },
+  // ── KPI BOXES ────────────────────────────────────────────
+  sectionTitle('Resumo Geral');
+  const tVol = sum(lastCalc.catVol), tRev = sum(lastCalc.catRev), tDesc = sum(lastCalc.catDesc);
+  const pctD = tRev > 0 ? tDesc/tRev*100 : 0;
+  const kpis = [
+    { l:'VOLUME TOTAL',      v: fmt(tVol),      s:`${lastCalc.nMonths} mês(es)`,   accent:false },
+    { l:'REC. JVM4 BRUTA',   v: R(tRev),        s:'valor de serviço',               accent:false },
+    { l:'DESCONTO TOTAL',    v: R(tDesc),        s:`${pctD.toFixed(1)}% s/ bruta`,  accent:true  },
+    { l:'REC. JVM4 LÍQUIDA', v: R(tRev-tDesc),  s:'após descontos',                 accent:false },
   ];
   const kW = (cW - 3*4) / 4;
   kpis.forEach((k, idx) => {
@@ -1405,47 +1403,12 @@ function exportarPDF() {
   });
   y += 32;
 
-  // Results table
-  y = sectionTitle('Resultado por Categoria', y);
-  const catRows = CATS.map(c => {
-    const v = lastCalc.catVol[c]||0, r = lastCalc.catRev[c]||0, d = lastCalc.catDesc[c]||0;
-    const p = r > 0 ? d/r*100 : 0;
-    return [c, fmt(v), `${p.toFixed(1)}%`, R(r), R(d), R(r-d)];
-  });
-  catRows.push(['TOTAL', fmt(tVol), `${pctD.toFixed(1)}%`, R(tRev), R(tDesc), R(tRev-tDesc)]);
+  // ── SCALE TABLES (active scenario only) ──────────────────
+  sectionTitle('Escala de Descontos');
+  const tW = (cW - 8) / 2;
 
-  doc.autoTable({
-    startY: y, margin: { left: mg, right: mg },
-    head: [['Categoria','Volume','Desc %','Rec. JVM4 Bruta','Desconto R$','Rec. JVM4 Líquida']],
-    body: catRows,
-    styles: { fontSize: 9, cellPadding: 3.5 },
-    headStyles: { fillColor:[29,78,216], textColor:255, fontStyle:'bold', fontSize:8 },
-    columnStyles: {
-      0: { fontStyle:'bold' },
-      1: { halign:'right' },
-      2: { halign:'right', textColor:[29,78,216], fontStyle:'bold' },
-      3: { halign:'right' },
-      4: { halign:'right', textColor:[29,78,216] },
-      5: { halign:'right' },
-    },
-    didParseCell: d => {
-      if (d.section==='body' && d.row.index === CATS.length) {
-        d.cell.styles.fontStyle  = 'bold';
-        d.cell.styles.fillColor  = [241,245,249];
-      }
-    },
-    theme: 'grid',
-  });
-
-  // ── PAGE 2+: ESCALAS ─────────────────────────────────────
-  doc.addPage();
-  header('JVM4 — Escalas de Desconto por Cenário');
-  y = 30;
-
-  const tW = (cW - 8) / 2; // two-column layout
-
-  function scaleTable(sIdx, cat, startY, isLeft) {
-    const tiers = scenarios[sIdx].escala[cat] || [];
+  function scaleTable(cat, startY, isLeft) {
+    const tiers = s.escala[cat] || [];
     const lm = isLeft ? mg : mg + tW + 8;
     const rm = isLeft ? mg + tW + 8 : mg;
     const [r,g,b] = catColorRgb(cat);
@@ -1454,10 +1417,10 @@ function exportarPDF() {
       margin: { left: lm, right: rm },
       head: [[cat, 'Vol. Mínimo', 'Desc %']],
       body: tiers.map((t,i) => [`${i+1}`, t.v.toLocaleString('pt-BR'), `${t.p}%`]),
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      headStyles: { fillColor:[r,g,b], textColor:255, fontStyle:'bold', fontSize:8 },
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      headStyles: { fillColor:[r,g,b], textColor:255, fontStyle:'bold', fontSize:9 },
       columnStyles: {
-        0: { halign:'center', cellWidth:8, textColor:[100,116,139] },
+        0: { halign:'center', cellWidth:9, textColor:[100,116,139] },
         1: { halign:'right' },
         2: { halign:'right', textColor:[r,g,b], fontStyle:'bold' },
       },
@@ -1467,27 +1430,24 @@ function exportarPDF() {
     return doc.lastAutoTable.finalY;
   }
 
-  scenarios.forEach((s, sIdx) => {
-    if (sIdx > 0) {
-      if (y > pageH - 80) { doc.addPage(); header('JVM4 — Escalas de Desconto por Cenário'); y = 30; }
-      else { y += 6; }
-    }
-    y = sectionTitle(s.name, y);
-
-    // pair: (500ml, 1500ml), (5L, Demais), (500ml-VD alone)
-    const pairs = [['500ml','1500ml'],['5L','Demais'],['500ml-VD',null]];
-    pairs.forEach(([left, right]) => {
-      if (y > pageH - 50) { doc.addPage(); header('JVM4 — Escalas de Desconto por Cenário'); y = 30; }
-      const startY = y;
-      const endL = scaleTable(sIdx, left, startY, true);
-      let endR = startY;
-      if (right) endR = scaleTable(sIdx, right, startY, false);
-      y = Math.max(endL, endR) + 6;
-    });
+  const pairs = [['500ml','1500ml'],['5L','Demais'],['500ml-VD',null]];
+  pairs.forEach(([left, right]) => {
+    checkPage(50);
+    const startY = y;
+    const endL = scaleTable(left, startY, true);
+    const endR = right ? scaleTable(right, startY, false) : startY;
+    y = Math.max(endL, endR) + 7;
   });
 
-  footerAll();
-  doc.save(`EscalaDescontos_JVM4_${stamp}.pdf`);
+  // ── FOOTER ALL PAGES ─────────────────────────────────────
+  const total = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(148,163,184);
+    doc.text(`JVM4 — ${s.name} — ${tsLabel} — Pág. ${p}/${total}`, pageW/2, pageH - 6, { align:'center' });
+  }
+
+  doc.save(`EscalaDescontos_JVM4_${s.name.replace(/\s/g,'')}_${stamp}.pdf`);
 }
 
 function catColorRgb(cat) {
