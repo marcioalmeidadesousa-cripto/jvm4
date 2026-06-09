@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     /* ── Login overlay ───────────────────────────────── */
     #loginOverlay {
@@ -421,6 +422,7 @@ function doLogin() {
     <h1>Simulador de Escala de Descontos</h1>
     <p>JVM4 &mdash; Histórico Abr/2025 a Abr/2026</p>
   </div>
+  <div id="saveStatus" style="margin-left:auto;font-size:11px;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;"></div>
 </header>
 
 <div class="page">
@@ -663,9 +665,73 @@ let chartOpen  = false;
 let growthPct  = 0;
 
 // ============================================================
+// SUPABASE
+// ============================================================
+const SUPA_URL = 'https://skdkitflogcunbqikcre.supabase.co';
+const SUPA_KEY = 'sb_publishable_47tScPKHHChf073YH3rosw_QVVJeQed';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+async function loadFromSupabase() {
+  showSaveStatus('loading');
+  try {
+    const { data, error } = await supa
+      .from('jvm4_cenarios')
+      .select('*')
+      .order('id');
+    if (!error && data && data.length === 3) {
+      data.forEach((row, i) => {
+        scenarios[i].name   = row.nome;
+        scenarios[i].escala = row.escala;
+      });
+      showSaveStatus('ok');
+    } else {
+      showSaveStatus('error');
+    }
+  } catch(e) {
+    showSaveStatus('error');
+  }
+}
+
+let _saveTimer = null;
+function scheduleSave(sIdx) {
+  clearTimeout(_saveTimer);
+  showSaveStatus('pending');
+  _saveTimer = setTimeout(() => saveToSupabase(sIdx), 1200);
+}
+
+async function saveToSupabase(sIdx) {
+  showSaveStatus('saving');
+  const s = scenarios[sIdx];
+  try {
+    const { error } = await supa
+      .from('jvm4_cenarios')
+      .update({ nome: s.name, escala: s.escala, updated_at: new Date().toISOString() })
+      .eq('id', sIdx + 1);
+    showSaveStatus(error ? 'error' : 'ok');
+  } catch(e) {
+    showSaveStatus('error');
+  }
+}
+
+function showSaveStatus(state) {
+  const el = document.getElementById('saveStatus');
+  const map = {
+    loading: ['⟳', '#94a3b8', 'Carregando...'],
+    pending: ['●',  '#f59e0b', 'Aguardando...'],
+    saving:  ['⟳', '#3b82f6', 'Salvando...'],
+    ok:      ['✓',  '#10b981', 'Salvo'],
+    error:   ['✕',  '#ef4444', 'Erro ao salvar'],
+  };
+  const [icon, color, label] = map[state] || map.ok;
+  el.innerHTML = `<span style="color:${color};font-size:14px">${icon}</span><span style="color:${color}">${label}</span>`;
+  if (state === 'ok') setTimeout(() => { el.innerHTML = ''; }, 3000);
+}
+
+// ============================================================
 // BOOT
 // ============================================================
-function init() {
+async function init() {
+  await loadFromSupabase();
   renderChips();
   renderScenarioTabs();
   renderCatTabs();
@@ -792,6 +858,7 @@ function renameScenario(i, el) {
     const val = input.value.trim() || current;
     scenarios[i].name = val;
     renderScenarioTabs();
+    scheduleSave(i);
   }
   input.addEventListener('blur', save);
   input.addEventListener('keydown', e => { if(e.key==='Enter') input.blur(); });
@@ -882,22 +949,25 @@ function fmtVolInput(el, sIdx, cat, i) {
   const raw = parseFloat(el.value.replace(/\./g,'').replace(',','.')) || 0;
   scenarios[sIdx].escala[cat][i].v = raw;
   el.value = raw.toLocaleString('pt-BR');
-  renderEditor();
-  run();
+  renderEditor(); run();
+  scheduleSave(sIdx);
 }
 
 function updTier(sIdx, cat, i, field, val) {
   scenarios[sIdx].escala[cat][i][field] = parseFloat(val)||0;
   renderEditor(); run();
+  scheduleSave(sIdx);
 }
 function delTier(sIdx, cat, i) {
   scenarios[sIdx].escala[cat].splice(i,1);
   renderEditor(); run();
+  scheduleSave(sIdx);
 }
 function addTier(sIdx, cat) {
   const t = scenarios[sIdx].escala[cat];
   t.push({ v: t.length ? t[t.length-1].v+25000 : 0, p: t.length ? t[t.length-1].p+2 : 5 });
   renderEditor(); run();
+  scheduleSave(sIdx);
 }
 
 // ============================================================
