@@ -1337,114 +1337,96 @@ function exportarPDF() {
   const tsLabel = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
   const s = scenarios[activeScenario];
 
-  function drawHeader() {
-    doc.setFillColor(29, 78, 216);
-    doc.rect(0, 0, pageW, 22, 'F');
-    doc.setTextColor(255,255,255);
-    doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text(`JVM4 — ${s.name}`, mg, 14);
-    doc.setFont('helvetica','normal'); doc.setFontSize(8);
-    doc.text(`Gerado em ${tsLabel}`, pageW - mg, 14, { align:'right' });
-  }
-
-  function checkPage(need) {
-    if (y + need > pageH - 12) {
-      doc.addPage();
-      drawHeader();
-      y = 30;
-    }
-  }
-
-  function sectionTitle(title) {
-    checkPage(20);
-    doc.setFillColor(241,245,249);
-    doc.roundedRect(mg, y, cW, 8, 1.5, 1.5, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.setTextColor(15,23,42);
-    doc.text(title, mg + 4, y + 5.5);
-    y += 12;
-  }
-
   // ── HEADER ───────────────────────────────────────────────
-  drawHeader();
-  y = 30;
+  doc.setFillColor(29, 78, 216);
+  doc.rect(0, 0, pageW, 20, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12);
+  doc.text(`JVM4 — ${s.name}`, mg, 13);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.text(`Gerado em ${tsLabel}`, pageW - mg, 13, { align:'right' });
+  y = 26;
 
-  // period + mode info
+  // period info
   const monthsInfo = selMonths.size === allMonths.length ? 'Todos os meses' :
                      selMonths.size === 1 ? [...selMonths][0] : `${selMonths.size} meses`;
   const gInfo = growthPct !== 0 ? `  |  Crescimento: ${growthPct>0?'+':''}${growthPct}%` : '';
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(100,116,139);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(100,116,139);
   doc.text(`Período: ${monthsInfo}  |  Modo: ${mode==='acumulado'?'Acumulado':'Por mês'}${gInfo}`, mg, y);
-  y += 10;
+  y += 8;
 
   // ── KPI BOXES ────────────────────────────────────────────
-  sectionTitle('Resumo Geral');
   const tVol = sum(lastCalc.catVol), tRev = sum(lastCalc.catRev), tDesc = sum(lastCalc.catDesc);
   const pctD = tRev > 0 ? tDesc/tRev*100 : 0;
   const kpis = [
-    { l:'VOLUME TOTAL',      v: fmt(tVol),      s:`${lastCalc.nMonths} mês(es)`,   accent:false },
-    { l:'REC. JVM4 BRUTA',   v: R(tRev),        s:'valor de serviço',               accent:false },
-    { l:'DESCONTO TOTAL',    v: R(tDesc),        s:`${pctD.toFixed(1)}% s/ bruta`,  accent:true  },
-    { l:'REC. JVM4 LÍQUIDA', v: R(tRev-tDesc),  s:'após descontos',                 accent:false },
+    { l:'VOLUME TOTAL',      v: fmt(tVol),     s:`${lastCalc.nMonths} mês(es)` },
+    { l:'REC. JVM4 BRUTA',   v: R(tRev),       s:'valor de serviço'            },
+    { l:'DESCONTO TOTAL',    v: R(tDesc),       s:`${pctD.toFixed(1)}% s/ bruta` },
+    { l:'REC. JVM4 LÍQUIDA', v: R(tRev-tDesc), s:'após descontos'               },
   ];
-  const kW = (cW - 3*4) / 4;
+  const kW = (cW - 3*3) / 4;
   kpis.forEach((k, idx) => {
-    const x = mg + idx * (kW + 4);
-    doc.setFillColor(k.accent ? 239 : 248, k.accent ? 246 : 250, k.accent ? 255 : 252);
-    doc.setDrawColor(k.accent ? 147 : 226, k.accent ? 197 : 232, k.accent ? 253 : 240);
-    doc.roundedRect(x, y, kW, 24, 2, 2, 'FD');
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(148,163,184);
-    doc.text(k.l, x + 4, y + 6);
-    doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
-    doc.setTextColor(k.accent ? 29 : 15, k.accent ? 78 : 23, k.accent ? 216 : 42);
-    doc.text(k.v, x + 4, y + 14);
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(148,163,184);
-    doc.text(k.s, x + 4, y + 21);
+    const x = mg + idx * (kW + 3);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(x, y, kW, 20, 1.5, 1.5, 'FD');
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(148,163,184);
+    doc.text(k.l, x + 3, y + 5);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42);
+    doc.text(k.v, x + 3, y + 12);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(148,163,184);
+    doc.text(k.s, x + 3, y + 18);
   });
-  y += 32;
+  y += 26;
 
-  // ── SCALE TABLES (active scenario only) ──────────────────
-  sectionTitle('Escala de Descontos');
-  const tW = (cW - 8) / 2;
+  // ── SCALE TABLE (flat, all categories) ───────────────────
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42);
+  doc.text('Escala de Descontos', mg, y);
+  y += 4;
 
-  function scaleTable(cat, startY, isLeft) {
+  // Build flat rows — category name only on first tier of each group
+  const firstIdxOf = {};
+  const flatRows = [];
+  CATS.forEach(cat => {
     const tiers = s.escala[cat] || [];
-    const lm = isLeft ? mg : mg + tW + 8;
-    const rm = isLeft ? mg + tW + 8 : mg;
-    const [r,g,b] = catColorRgb(cat);
-    doc.autoTable({
-      startY,
-      margin: { left: lm, right: rm },
-      head: [[cat, 'Vol. Mínimo', 'Desc %']],
-      body: tiers.map((t,i) => [`${i+1}`, t.v.toLocaleString('pt-BR'), `${t.p}%`]),
-      styles: { fontSize: 8.5, cellPadding: 2.5 },
-      headStyles: { fillColor:[r,g,b], textColor:255, fontStyle:'bold', fontSize:9 },
-      columnStyles: {
-        0: { halign:'center', cellWidth:9, textColor:[100,116,139] },
-        1: { halign:'right' },
-        2: { halign:'right', textColor:[r,g,b], fontStyle:'bold' },
-      },
-      theme: 'striped',
-      alternateRowStyles: { fillColor:[248,250,252] },
+    tiers.forEach((t, i) => {
+      if (i === 0) firstIdxOf[flatRows.length] = cat;
+      flatRows.push([i === 0 ? cat : '', `${i+1}`, t.v.toLocaleString('pt-BR'), `${t.p}%`]);
     });
-    return doc.lastAutoTable.finalY;
-  }
-
-  const pairs = [['500ml','1500ml'],['5L','Demais'],['500ml-VD',null]];
-  pairs.forEach(([left, right]) => {
-    checkPage(50);
-    const startY = y;
-    const endL = scaleTable(left, startY, true);
-    const endR = right ? scaleTable(right, startY, false) : startY;
-    y = Math.max(endL, endR) + 7;
   });
 
-  // ── FOOTER ALL PAGES ─────────────────────────────────────
+  doc.autoTable({
+    startY: y,
+    margin: { left: mg, right: mg },
+    head: [['Categoria', '#', 'Vol. Mínimo', 'Desc %']],
+    body: flatRows,
+    styles: { fontSize: 8, cellPadding: 2, textColor: [30,41,59] },
+    headStyles: {
+      fillColor: [51, 65, 85], textColor: 255, fontStyle: 'bold', fontSize: 8, cellPadding: 3,
+    },
+    columnStyles: {
+      0: { fontStyle:'bold', cellWidth: 28 },
+      1: { halign:'center', cellWidth: 10, textColor:[100,116,139] },
+      2: { halign:'right' },
+      3: { halign:'right', fontStyle:'bold' },
+    },
+    didParseCell: d => {
+      if (d.section !== 'body') return;
+      if (firstIdxOf[d.row.index] !== undefined) {
+        d.cell.styles.fillColor = [241, 245, 249];
+      }
+    },
+    theme: 'plain',
+    tableLineColor: [226, 232, 240],
+    tableLineWidth: 0.2,
+  });
+
+  // ── FOOTER ───────────────────────────────────────────────
   const total = doc.internal.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
     doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(148,163,184);
-    doc.text(`JVM4 — ${s.name} — ${tsLabel} — Pág. ${p}/${total}`, pageW/2, pageH - 6, { align:'center' });
+    doc.text(`JVM4 — ${s.name} — ${tsLabel} — Pág. ${p}/${total}`, pageW/2, pageH - 5, { align:'center' });
   }
 
   doc.save(`EscalaDescontos_JVM4_${s.name.replace(/\s/g,'')}_${stamp}.pdf`);
