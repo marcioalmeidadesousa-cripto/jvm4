@@ -7,6 +7,55 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
+    /* ── Login overlay ───────────────────────────────── */
+    #loginOverlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-box {
+      background: #fff; border-radius: 16px; padding: 40px 36px;
+      width: 100%; max-width: 360px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .login-logo {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: linear-gradient(135deg,#1d4ed8,#3b82f6);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 14px; font-weight: 800; margin: 0 auto 20px;
+    }
+    .login-title {
+      text-align: center; font-size: 18px; font-weight: 700;
+      color: #0f172a; margin-bottom: 4px;
+    }
+    .login-sub {
+      text-align: center; font-size: 12px; color: #94a3b8; margin-bottom: 28px;
+    }
+    .login-field { margin-bottom: 14px; }
+    .login-field label {
+      display: block; font-size: 11px; font-weight: 700; color: #64748b;
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px;
+    }
+    .login-field input {
+      width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 14px; color: #0f172a; outline: none; transition: border-color .15s;
+      font-family: inherit;
+    }
+    .login-field input:focus { border-color: #3b82f6; }
+    .login-btn {
+      width: 100%; padding: 11px; background: linear-gradient(135deg,#1d4ed8,#3b82f6);
+      color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700;
+      cursor: pointer; margin-top: 8px; transition: opacity .15s;
+    }
+    .login-btn:hover { opacity: .9; }
+    .login-err {
+      display: none; margin-top: 12px; padding: 9px 12px; background: #fee2e2;
+      border-radius: 8px; color: #dc2626; font-size: 12px; font-weight: 600;
+      text-align: center;
+    }
+    .login-err.show { display: block; }
+  </style>
+  <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -319,6 +368,51 @@
   </style>
 </head>
 <body>
+
+<!-- LOGIN -->
+<div id="loginOverlay">
+  <div class="login-box">
+    <div class="login-logo">JVM4</div>
+    <div class="login-title">Simulador de Descontos</div>
+    <div class="login-sub">Grupo JAN — Acesso restrito</div>
+    <div class="login-field">
+      <label>Usuário</label>
+      <input id="loginUser" type="text" placeholder="usuário" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Senha</label>
+      <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <div class="login-err" id="loginErr">Usuário ou senha incorretos.</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  if (sessionStorage.getItem('jvm4auth') === 'ok') {
+    document.getElementById('loginOverlay').style.display = 'none';
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doLogin();
+  });
+})();
+
+function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  if (u === 'grupojan' && p === 'GJ2233*') {
+    sessionStorage.setItem('jvm4auth', 'ok');
+    document.getElementById('loginOverlay').style.display = 'none';
+  } else {
+    const err = document.getElementById('loginErr');
+    err.classList.add('show');
+    document.getElementById('loginPass').value = '';
+    document.getElementById('loginPass').focus();
+    setTimeout(() => err.classList.remove('show'), 3000);
+  }
+}
+</script>
 
 <header>
   <div class="logo" style="font-size:11px;letter-spacing:-.3px;">JVM4</div>
