@@ -471,6 +471,27 @@ function doLogin() {
       </div>
       <span class="growth-badge zero" id="growthBadge">sem crescimento</span>
     </div>
+
+    <div class="sep"></div>
+
+    <div style="display:flex;align-items:center;gap:6px">
+      <button onclick="exportarEscala()" style="
+        display:flex;align-items:center;gap:5px;
+        padding:5px 12px;border-radius:7px;border:1px solid #e2e8f0;
+        background:#f8fafc;color:#1d4ed8;font-size:11px;font-weight:700;
+        cursor:pointer;transition:all .12s;
+      " onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='#f8fafc'">
+        &#8681; Excel
+      </button>
+      <button onclick="exportarPDF()" style="
+        display:flex;align-items:center;gap:5px;
+        padding:5px 12px;border-radius:7px;border:1px solid #e2e8f0;
+        background:#f8fafc;color:#7e22ce;font-size:11px;font-weight:700;
+        cursor:pointer;transition:all .12s;
+      " onmouseover="this.style.background='#f5f3ff'" onmouseout="this.style.background='#f8fafc'">
+        &#128196; PDF
+      </button>
+    </div>
   </div>
 
   <!-- KPI ROW -->
@@ -501,34 +522,25 @@ function doLogin() {
     <!-- LEFT: SCALE EDITOR -->
     <div class="panel">
       <div class="panel-hd">
-        <h2>Escala de Descontos</h2>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px">
+          <h2>Escala de Descontos</h2>
           <button id="saveBtn" onclick="saveAll()" style="
             display:flex;align-items:center;gap:5px;
-            padding:5px 13px;border-radius:7px;border:1.5px solid #e2e8f0;
+            padding:4px 11px;border-radius:7px;border:1.5px solid #e2e8f0;
             background:#f8fafc;color:#64748b;font-size:11px;font-weight:700;
             cursor:pointer;transition:all .15s;
           ">💾 Salvar</button>
-          <button onclick="exportarEscala()" style="
-            display:flex;align-items:center;gap:5px;
-            padding:5px 12px;border-radius:7px;border:1px solid #e2e8f0;
-            background:#f8fafc;color:#1d4ed8;font-size:11px;font-weight:700;
-            cursor:pointer;transition:all .12s;
-          " onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='#f8fafc'">
-            &#8681; Excel
-          </button>
-          <button onclick="exportarPDF()" style="
-            display:flex;align-items:center;gap:5px;
-            padding:5px 12px;border-radius:7px;border:1px solid #e2e8f0;
-            background:#f8fafc;color:#7e22ce;font-size:11px;font-weight:700;
-            cursor:pointer;transition:all .12s;
-          " onmouseover="this.style.background='#f5f3ff'" onmouseout="this.style.background='#f8fafc'">
-            &#128196; PDF
-          </button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">ICMS</span>
+          <div class="seg">
+            <button class="seg-btn" id="icmsNao" onclick="setIcms(false)">Não</button>
+            <button class="seg-btn" id="icmsSim" onclick="setIcms(true)">Sim</button>
+          </div>
         </div>
       </div>
       <div class="panel-bd">
-        <div class="scenario-tabs" id="scenarioTabs"></div>
+        <div id="precosWrap"></div>
         <div class="cat-tabs" id="catTabs"></div>
         <div id="scaleEditor"></div>
       </div>
@@ -625,49 +637,177 @@ const servico = {
 
 const scenarios = [
   {
-    name: 'Cenário 1',
-    escala: {
-      "500ml"   : [{v:150000,p:9.6},{v:175000,p:12},{v:200000,p:14.4},{v:225000,p:16.8},{v:250000,p:19.2},{v:275000,p:21},{v:300000,p:22.8},{v:325000,p:24.24},{v:350000,p:25.68},{v:375000,p:27.48},{v:400000,p:29.28},{v:425000,p:31.68},{v:450000,p:34.08}],
-      "1500ml"  : [{v:50000,p:10},{v:70000,p:10},{v:90000,p:10},{v:100000,p:10},{v:110000,p:10},{v:120000,p:10},{v:130000,p:10}],
-      "5L"      : [{v:40000,p:10},{v:50000,p:10},{v:60000,p:10},{v:70000,p:10},{v:80000,p:10},{v:90000,p:10},{v:100000,p:10}],
-      "Demais"  : [{v:60000,p:8},{v:70000,p:8},{v:80000,p:8},{v:90000,p:8},{v:100000,p:8},{v:110000,p:8},{v:120000,p:8}],
-      "500ml-VD": [{v:100000,p:0},{v:120000,p:0},{v:140000,p:0},{v:160000,p:0},{v:180000,p:0},{v:200000,p:0}]
-    }
-  },
-  {
     name: 'Cenário 2',
     escala: {
-      "500ml"   : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:14},{v:225000,p:16},{v:250000,p:18},{v:275000,p:20},{v:300000,p:22},{v:325000,p:24},{v:350000,p:26},{v:375000,p:28},{v:400000,p:30},{v:425000,p:32},{v:450000,p:35}],
-      "1500ml"  : [{v:50000,p:10},{v:70000,p:12},{v:90000,p:14},{v:100000,p:16},{v:110000,p:18},{v:120000,p:20},{v:130000,p:22}],
-      "5L"      : [{v:40000,p:10},{v:50000,p:12},{v:60000,p:14},{v:70000,p:16},{v:80000,p:18},{v:90000,p:20},{v:100000,p:22}],
-      "Demais"  : [{v:60000,p:8},{v:70000,p:9},{v:80000,p:10},{v:90000,p:11},{v:100000,p:12},{v:110000,p:13},{v:120000,p:14}],
-      "500ml-VD": [{v:100000,p:10},{v:120000,p:12},{v:140000,p:13},{v:160000,p:14},{v:180000,p:15},{v:200000,p:16}]
-    }
-  },
-  {
-    name: 'Cenário 3',
-    escala: {
-      "500ml"   : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:18},{v:225000,p:20},{v:250000,p:24},{v:275000,p:26},{v:300000,p:28},{v:325000,p:30},{v:350000,p:34},{v:375000,p:36},{v:400000,p:40},{v:425000,p:42},{v:450000,p:44}],
-      "1500ml"  : [{v:50000,p:10},{v:70000,p:15},{v:90000,p:18},{v:100000,p:20},{v:110000,p:22},{v:120000,p:23},{v:130000,p:24}],
-      "5L"      : [{v:40000,p:10},{v:50000,p:12},{v:60000,p:15},{v:70000,p:18},{v:80000,p:20},{v:90000,p:22},{v:100000,p:25}],
-      "Demais"  : [{v:60000,p:10},{v:70000,p:12},{v:80000,p:14},{v:90000,p:16},{v:100000,p:18},{v:110000,p:20},{v:120000,p:22}],
-      "500ml-VD": [{v:100000,p:10},{v:120000,p:12},{v:140000,p:13},{v:160000,p:14},{v:180000,p:15},{v:200000,p:16}]
+      "500ml" : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:14},{v:225000,p:16},{v:250000,p:18},{v:275000,p:20},{v:300000,p:22},{v:325000,p:24},{v:350000,p:26},{v:375000,p:28},{v:400000,p:30},{v:425000,p:32},{v:450000,p:35}],
+      "1500ml": [{v:50000,p:10},{v:70000,p:12},{v:90000,p:14},{v:100000,p:16},{v:110000,p:18},{v:120000,p:20},{v:130000,p:22}],
+      "5L"    : [{v:40000,p:10},{v:50000,p:12},{v:60000,p:14},{v:70000,p:16},{v:80000,p:18},{v:90000,p:20},{v:100000,p:22}],
+      "Demais": [{v:60000,p:8},{v:70000,p:9},{v:80000,p:10},{v:90000,p:11},{v:100000,p:12},{v:110000,p:13},{v:120000,p:14}]
     }
   }
 ];
 
-let activeScenario = 0;
-const escala = () => scenarios[activeScenario].escala;
+const activeScenario = 0;
+const escala = () => scenarios[0].escala;
 
-const CATS    = ["500ml","1500ml","5L","Demais","500ml-VD"];
-const CAT_CLS = {"500ml":"b-500","1500ml":"b-1500","5L":"b-5l","Demais":"b-demais","500ml-VD":"b-vd"};
+// ── Valor de Serviço por categoria classifNova (R$/un.) ──────
+let precosCat = {};
+
+function computeDefaultPrecosCat() {
+  // Média ponderada real por classifNova (volumes históricos × preço do servico)
+  const vol = {}, rev = {};
+  NOVA_CATS.forEach(c => { vol[c] = 0; rev[c] = 0; });
+  dadosRaw.forEach(r => {
+    const nova = r.classifNova;
+    if (!nova || !NOVA_CATS.includes(nova)) return;
+    const p = servico[r.produto] || 0;
+    vol[nova] += r.volume;
+    rev[nova] += r.volume * p;
+  });
+  const res = {};
+  NOVA_CATS.forEach(c => { res[c] = vol[c] > 0 ? parseFloat((rev[c]/vol[c]).toFixed(2)) : 0; });
+  return res;
+}
+
+function savePrecosCat() {
+  try {
+    const rounded = {};
+    Object.keys(precosCat).forEach(k => { rounded[k] = parseFloat(precosCat[k].toFixed(2)); });
+    localStorage.setItem('jvm4_precos3', JSON.stringify(rounded));
+  } catch(e) {}
+}
+
+function loadPrecosCat() {
+  try {
+    const saved = localStorage.getItem('jvm4_precos3');
+    if (saved) {
+      const p = JSON.parse(saved);
+      if (NOVA_CATS.every(c => p[c] !== undefined)) return p;
+    }
+  } catch(e) {}
+  return computeDefaultPrecosCat();
+}
+
+function renderPrecos() {
+  const PRECO_ROWS = [
+    { label: '500ml',         sem: '500ml sem',         com: '500ml com'         },
+    { label: '1500ml',        sem: '1500ml sem',        com: '1500ml com'        },
+    { label: '5L',            sem: '5L',                com: null                },
+    { label: '350ml',         sem: '350ml sem',         com: '350ml com'         },
+    { label: '500ml premium', sem: '500ml premium sem', com: '500ml premium com'  },
+    { label: '10L',           sem: '10L',               com: null                },
+    { label: 'Copo',          sem: 'Copo',              com: null                },
+    { label: '500ml SW',      sem: '500ml SW',          com: null                },
+  ];
+
+  const inp = key => key && NOVA_CATS.includes(key)
+    ? `<input type="number" step="0.01" min="0"
+         value="${(precosCat[key]||0).toFixed(2)}"
+         style="width:72px;padding:4px 6px;border:1.5px solid #e2e8f0;border-radius:5px;
+                font-size:12px;font-family:'SF Mono','Consolas',monospace;
+                color:#1d4ed8;font-weight:700;text-align:right;background:#fff"
+         onchange="updPreco('${key}',this.value)"
+         onkeydown="if(event.key==='Enter')this.blur()">`
+    : `<span style="color:#cbd5e1;font-size:12px">—</span>`;
+
+  const rows = PRECO_ROWS.filter(r =>
+    NOVA_CATS.includes(r.sem) || (r.com && NOVA_CATS.includes(r.com))
+  );
+
+  document.getElementById('precosWrap').innerHTML = `
+    <div style="padding:8px 0 10px;border-bottom:1px solid #f1f5f9;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px">
+          Valor de Serviço (R$/un.)
+        </span>
+        <button onclick="resetPrecos()"
+          style="padding:2px 8px;border-radius:4px;border:1px solid #e2e8f0;
+                 background:#f8fafc;color:#64748b;font-size:9px;font-weight:600;cursor:pointer">
+          ↺ Reset
+        </button>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:0 12px 6px 0;color:#94a3b8;font-size:10px;
+                       font-weight:700;text-transform:uppercase;letter-spacing:.05em"></th>
+            <th style="text-align:center;padding:0 8px 6px;color:#64748b;font-size:10px;
+                       font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+                       border-bottom:2px solid #e2e8f0">Sem Gás</th>
+            <th style="text-align:center;padding:0 8px 6px;color:#64748b;font-size:10px;
+                       font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+                       border-bottom:2px solid #e2e8f0">Com Gás</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r, i) => {
+            const color = NOVA_COLOR[r.sem] || NOVA_COLOR[r.com] || '#475569';
+            return `<tr style="background:${i%2===0?'#ffffff':'#f8fafc'}">
+              <td style="padding:5px 12px 5px 0;font-size:11px;font-weight:700;
+                         color:${color};white-space:nowrap">${r.label}</td>
+              <td style="padding:5px 8px;text-align:center">${inp(r.sem)}</td>
+              <td style="padding:5px 8px;text-align:center">${inp(r.com)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function updPreco(cat, val) {
+  precosCat[cat] = parseFloat(val) || 0;
+  savePrecosCat();
+  run();
+}
+
+function resetPrecos() {
+  precosCat = computeDefaultPrecosCat();
+  savePrecosCat();
+  renderPrecos();
+  run();
+}
+
+// Categorias do desconto (escala)
+const CATS    = ["500ml","1500ml","5L","Demais"];
+const CAT_CLS = {"500ml":"b-500","1500ml":"b-1500","5L":"b-5l","Demais":"b-demais"};
 const CAT_COLOR = {
-  "500ml"   :"#1d4ed8",
-  "1500ml"  :"#15803d",
-  "5L"      :"#a16207",
-  "Demais"  :"#7e22ce",
-  "500ml-VD":"#be123c"
+  "500ml" :"#1d4ed8",
+  "1500ml":"#15803d",
+  "5L"    :"#a16207",
+  "Demais":"#7e22ce"
 };
+
+// Categorias do classifNova — lidas dinamicamente dos dados
+// Ordem de exibição preferida
+const NOVA_ORDER = [
+  "500ml sem","500ml com",
+  "1500ml sem","1500ml com",
+  "5L",
+  "350ml sem","350ml com",
+  "500ml SW",
+  "500ml premium sem","500ml premium com",
+  "10L","Copo"
+];
+const NOVA_CATS = [
+  ...NOVA_ORDER.filter(c => dadosRaw.some(r => r.classifNova === c)),
+  ...[...new Set(dadosRaw.map(r => r.classifNova).filter(c => c && !NOVA_ORDER.includes(c)))].sort()
+];
+
+// mapeamento nova → categoria de desconto (derivado dos dados)
+const NOVA_TO_CAT = {};
+dadosRaw.forEach(r => {
+  if (r.classifNova && !NOVA_TO_CAT[r.classifNova]) {
+    NOVA_TO_CAT[r.classifNova] = r.classif === '500ml-VD' ? '500ml' : r.classif;
+  }
+});
+
+// cores para cada nova categoria
+const _BASE_COLOR = {"500ml":"#1d4ed8","1500ml":"#15803d","5L":"#a16207","Demais":"#7e22ce"};
+const NOVA_COLOR = {};
+NOVA_CATS.forEach(c => { NOVA_COLOR[c] = _BASE_COLOR[NOVA_TO_CAT[c]] || "#64748b"; });
+// variações de tom para sem/com
+const _LIGHTEN = {"500ml sem":"#1d4ed8","500ml com":"#3b82f6","1500ml sem":"#15803d","1500ml com":"#22c55e"};
+Object.assign(NOVA_COLOR, _LIGHTEN);
 
 const allMonths = [...new Set(dadosRaw.map(d => d.data))];
 
@@ -680,8 +820,9 @@ let detOpen    = false;
 let ddOpen     = false;
 let volChart   = null;
 let chartOpen  = false;
-let growthPct  = 0;
-let isDirty    = false;
+let growthPct     = 0;
+let isDirty       = false;
+let incorporarIcms = false;
 let lastCalc   = { catVol:{}, catRev:{}, catDesc:{}, months:[], nMonths:0 };
 
 // ============================================================
@@ -697,12 +838,11 @@ async function loadFromSupabase() {
     const { data, error } = await supa
       .from('jvm4_cenarios')
       .select('*')
-      .order('id');
-    if (!error && data && data.length === 3) {
-      data.forEach((row, i) => {
-        scenarios[i].name   = row.nome;
-        scenarios[i].escala = row.escala;
-      });
+      .eq('id', 2)
+      .single();
+    if (!error && data) {
+      scenarios[0].name   = data.nome;
+      scenarios[0].escala = data.escala;
       showSaveStatus('ok');
     } else {
       showSaveStatus('error');
@@ -727,15 +867,14 @@ async function saveAll() {
   const btn = document.getElementById('saveBtn');
   if (btn) { btn.disabled = true; btn.style.opacity = '.65'; btn.textContent = 'Salvando...'; }
   showSaveStatus('saving');
+  savePrecosCat();
   let ok = true;
   try {
-    for (let i = 0; i < scenarios.length; i++) {
-      const { error } = await supa
-        .from('jvm4_cenarios')
-        .update({ nome: scenarios[i].name, escala: scenarios[i].escala, updated_at: new Date().toISOString() })
-        .eq('id', i + 1);
-      if (error) { ok = false; break; }
-    }
+    const { error } = await supa
+      .from('jvm4_cenarios')
+      .update({ nome: scenarios[0].name, escala: scenarios[0].escala, updated_at: new Date().toISOString() })
+      .eq('id', 2);
+    if (error) ok = false;
   } catch(e) { ok = false; }
   showSaveStatus(ok ? 'ok' : 'error');
   if (ok) {
@@ -766,10 +905,14 @@ function showSaveStatus(state) {
 // ============================================================
 async function init() {
   await loadFromSupabase();
+  const nameEl = document.getElementById('scenarioName');
+  if (nameEl) nameEl.textContent = scenarios[0].name;
+  precosCat = loadPrecosCat();
   renderChips();
-  renderScenarioTabs();
+  renderPrecos();
   renderCatTabs();
   renderChartCatTabs();
+  document.getElementById('icmsNao').classList.add('on');
   run();
 
   // Close dropdown on outside click
@@ -861,37 +1004,21 @@ function setMode(m) {
 }
 
 // ============================================================
-// SCENARIO TABS
+// SCENARIO NAME (rename via double-click on header)
 // ============================================================
-function renderScenarioTabs() {
-  document.getElementById('scenarioTabs').innerHTML = scenarios.map((s, i) => `
-    <div class="scenario-tab ${i===activeScenario?'on':''}"
-         onclick="setScenario(${i})"
-         ondblclick="renameScenario(${i}, this)">
-      ${s.name}
-    </div>`).join('');
-}
-
-function setScenario(i) {
-  activeScenario = i;
-  renderScenarioTabs();
-  renderEditor();
-  run();
-}
-
-function renameScenario(i, el) {
-  const current = scenarios[i].name;
+function renameScenario(el) {
+  const current = scenarios[0].name;
   const input = document.createElement('input');
   input.value = current;
-  input.style.width = '100%';
+  input.style.cssText = 'font-size:13px;font-weight:700;border:none;outline:none;background:transparent;color:inherit;width:120px';
   el.textContent = '';
   el.appendChild(input);
   input.focus();
   input.select();
   function save() {
     const val = input.value.trim() || current;
-    scenarios[i].name = val;
-    renderScenarioTabs();
+    scenarios[0].name = val;
+    el.textContent = val;
     markDirty();
   }
   input.addEventListener('blur', save);
@@ -1024,11 +1151,14 @@ function renderChart() {
   const color  = CAT_COLOR[chartCat];
   const colorA = color + '22'; // transparent fill
 
-  // Build volume per month for this category (always all 13 months)
+  // Build volume per month for this category (always all 12 months)
   const labels   = allMonths;
   const dataReal = allMonths.map(m =>
-    dadosRaw.filter(d => d.data === m && d.classif === chartCat)
-            .reduce((s,d) => s+d.volume, 0)
+    dadosRaw.filter(d => {
+      if (d.data !== m) return false;
+      const cat = d.classifNova ? (NOVA_TO_CAT[d.classifNova] || d.classif) : d.classif;
+      return cat === chartCat;
+    }).reduce((s,d) => s+d.volume, 0)
   );
   const gMult    = 1 + growthPct / 100;
   const dataProj = growthPct !== 0 ? dataReal.map(v => Math.round(v * gMult)) : null;
@@ -1119,6 +1249,13 @@ function getDiscount(classif, volume) {
   return i>=0 ? escala()[classif][i].p/100 : 0;
 }
 
+function setIcms(val) {
+  incorporarIcms = val;
+  document.getElementById('icmsNao').classList.toggle('on', !val);
+  document.getElementById('icmsSim').classList.toggle('on',  val);
+  run();
+}
+
 function run() {
   const data = dadosRaw.filter(d => selMonths.has(d.data));
 
@@ -1133,14 +1270,17 @@ function run() {
     CATS.forEach(c => { monthlyData[m][c] = {vol:0,rev:0,desc:0}; });
   });
 
-  const gMult = 1 + growthPct / 100;
+  const gMult    = 1 + growthPct / 100;
+  const icmsMult = incorporarIcms ? (1 / 0.88) : 1;
 
   if (mode === 'acumulado') {
     data.forEach(row => {
-      const price = servico[row.produto] || 0;
-      const vol   = row.volume * gMult;
-      catVol[row.classif] += vol;
-      catRev[row.classif] += vol * price;
+      const nova = row.classifNova;
+      const cat  = nova ? (NOVA_TO_CAT[nova] || nova) : row.classif;
+      if (!CATS.includes(cat)) return;
+      const vol = row.volume * gMult;
+      catVol[cat] += vol;
+      catRev[cat] += vol * (nova ? (precosCat[nova] || 0) * icmsMult : 0);
     });
     CATS.forEach(c => {
       catDesc[c] = catRev[c] * getDiscount(c, catVol[c]);
@@ -1149,9 +1289,15 @@ function run() {
     months.forEach(m => {
       const mRows = data.filter(d => d.data===m);
       CATS.forEach(c => {
-        const rows = mRows.filter(d => d.classif===c);
-        const vol  = rows.reduce((s,d) => s + d.volume * gMult, 0);
-        const rev  = rows.reduce((s,d) => s + d.volume * gMult * (servico[d.produto]||0), 0);
+        const rows = mRows.filter(d => {
+          const nova = d.classifNova;
+          return nova ? (NOVA_TO_CAT[nova] || nova) === c : d.classif === c;
+        });
+        const vol = rows.reduce((s,d) => s + d.volume * gMult, 0);
+        const rev = rows.reduce((s,d) => {
+          const nova = d.classifNova;
+          return s + d.volume * gMult * (nova ? (precosCat[nova] || 0) * icmsMult : 0);
+        }, 0);
         const desc = rev * getDiscount(c, vol);
         monthlyData[m][c] = {vol, rev, desc};
         catVol[c]  += vol;
@@ -1173,10 +1319,12 @@ function run() {
 // RENDER KPI
 // ============================================================
 function renderKPI(catVol, catRev, catDesc, nMonths) {
-  const tVol  = sum(catVol);
-  const tRev  = sum(catRev);
-  const tDesc = sum(catDesc);
-  const pct   = tRev>0 ? tDesc/tRev*100 : 0;
+  const tVol   = sum(catVol);
+  const tRev   = sum(catRev);
+  const tDesc  = sum(catDesc);
+  const tIcms  = incorporarIcms ? tRev * 0.12 : 0;
+  const tLiq   = tRev - tDesc - tIcms;
+  const pct    = tRev>0 ? tDesc/tRev*100 : 0;
 
   document.getElementById('kpiRow').innerHTML = `
     <div class="kpi">
@@ -1193,11 +1341,31 @@ function renderKPI(catVol, catRev, catDesc, nMonths) {
       <div class="lbl">Desconto Total</div>
       <div class="val">${R(tDesc)}</div>
       <div class="sub">${pct.toFixed(1)}% sobre receita JVM4 bruta</div>
+      ${incorporarIcms ? `<div style="font-size:10px;color:#94a3b8;margin-top:4px">
+        ICMS (12%): <span style="font-weight:600;color:#ef4444">${R(tIcms)}</span>
+      </div>` : ''}
     </div>
-    <div class="kpi">
+    <div class="kpi ${tLiq < 18731354.50 ? 'accent' : ''}">
       <div class="lbl">Receita JVM4 Líquida</div>
-      <div class="val">${R(tRev-tDesc)}</div>
-      <div class="sub">após descontos simulados</div>
+      <div class="val">${R(tLiq)}</div>
+      ${incorporarIcms ? `<div style="font-size:10px;color:#94a3b8;margin-top:1px">
+        Desc+ICMS: <span style="font-weight:600">${R(tDesc+tIcms)}</span>
+      </div>` : ''}
+      <div style="font-size:10px;color:#94a3b8;margin-top:2px">
+        Média: <span style="font-weight:600">${R(nMonths > 0 ? tLiq/nMonths : 0)}/mês</span>
+      </div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:1px">
+        Realizado: <span style="font-weight:600">R$ 18.731.354,50</span>
+      </div>
+      ${(() => {
+        const ganho = 18731354.50 - tLiq;
+        const cor   = ganho > 0 ? '#10b981' : '#ef4444';
+        const sinal = ganho > 0 ? '+' : '';
+        const label = ganho > 0 ? 'ganho simulado' : 'custo adicional';
+        return `<div style="font-size:11px;font-weight:700;color:${cor};margin-top:3px">
+          ${sinal}${R(ganho)} <span style="font-weight:400;font-size:9px">${label}</span>
+        </div>`;
+      })()}
     </div>`;
 
   document.getElementById('resSub').textContent =
@@ -1433,7 +1601,7 @@ function exportarPDF() {
 }
 
 function catColorRgb(cat) {
-  return { "500ml":[29,78,216], "1500ml":[21,128,61], "5L":[161,98,7], "Demais":[126,34,206], "500ml-VD":[190,18,60] }[cat] || [29,78,216];
+  return { "500ml":[29,78,216], "1500ml":[21,128,61], "5L":[161,98,7], "Demais":[126,34,206] }[cat] || [29,78,216];
 }
 
 // ============================================================
