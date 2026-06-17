@@ -1596,6 +1596,11 @@ function exportarPDF() {
       3: { halign:'right' },
       4: { halign:'right', textColor:[146,64,14], fontStyle:'bold' },
     },
+    didParseCell: d => {
+      if (d.section === 'head' && d.column.index > 0) {
+        d.cell.styles.halign = 'right';
+      }
+    },
     alternateRowStyles: { fillColor: [248,250,252] },
     theme: 'plain',
     tableLineColor: [226,232,240],
