@@ -843,6 +843,9 @@ async function loadFromSupabase() {
     if (!error && data) {
       scenarios[0].name   = data.nome;
       scenarios[0].escala = data.escala;
+      if (data.precos && NOVA_CATS.every(c => data.precos[c] !== undefined)) {
+        precosCat = data.precos;
+      }
       showSaveStatus('ok');
     } else {
       showSaveStatus('error');
@@ -872,7 +875,7 @@ async function saveAll() {
   try {
     const { error } = await supa
       .from('jvm4_cenarios')
-      .update({ nome: scenarios[0].name, escala: scenarios[0].escala, updated_at: new Date().toISOString() })
+      .update({ nome: scenarios[0].name, escala: scenarios[0].escala, precos: precosCat, updated_at: new Date().toISOString() })
       .eq('id', 2);
     if (error) ok = false;
   } catch(e) { ok = false; }
@@ -907,7 +910,9 @@ async function init() {
   await loadFromSupabase();
   const nameEl = document.getElementById('scenarioName');
   if (nameEl) nameEl.textContent = scenarios[0].name;
-  precosCat = loadPrecosCat();
+  if (!NOVA_CATS.every(c => precosCat[c] !== undefined)) {
+    precosCat = loadPrecosCat();
+  }
   renderChips();
   renderPrecos();
   renderCatTabs();
