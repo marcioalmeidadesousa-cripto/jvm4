@@ -1521,94 +1521,138 @@ function exportarPDF() {
   doc.rect(0, 0, pageW, 20, 'F');
   doc.setTextColor(255,255,255);
   doc.setFont('helvetica','bold'); doc.setFontSize(12);
-  doc.text(`JVM4 — ${s.name}`, mg, 13);
+  doc.text('JVM4 — Escala de Descontos', mg, 13);
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   doc.text(`Gerado em ${tsLabel}`, pageW - mg, 13, { align:'right' });
   y = 26;
 
-  // period info
+  // ── PERIOD INFO ───────────────────────────────────────────
   const monthsInfo = selMonths.size === allMonths.length ? 'Todos os meses' :
                      selMonths.size === 1 ? [...selMonths][0] : `${selMonths.size} meses`;
-  const gInfo = growthPct !== 0 ? `  |  Crescimento: ${growthPct>0?'+':''}${growthPct}%` : '';
+  const gInfo   = growthPct !== 0 ? `  |  Crescimento: ${growthPct>0?'+':''}${growthPct}%` : '';
+  const icmsInfo = incorporarIcms ? '  |  ICMS incorporado (÷0,88)' : '';
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(100,116,139);
-  doc.text(`Período: ${monthsInfo}  |  Modo: ${mode==='acumulado'?'Acumulado':'Por mês'}${gInfo}`, mg, y);
+  doc.text(`Período: ${monthsInfo}  |  Modo: ${mode==='acumulado'?'Acumulado':'Por mês'}${gInfo}${icmsInfo}`, mg, y);
   y += 8;
 
   // ── KPI BOXES ────────────────────────────────────────────
-  const tVol = sum(lastCalc.catVol), tRev = sum(lastCalc.catRev), tDesc = sum(lastCalc.catDesc);
-  const pctD = tRev > 0 ? tDesc/tRev*100 : 0;
+  const tVol  = sum(lastCalc.catVol), tRev = sum(lastCalc.catRev), tDesc = sum(lastCalc.catDesc);
+  const tIcms = incorporarIcms ? tRev * 0.12 : 0;
+  const tLiq  = tRev - tDesc - tIcms;
+  const pctD  = tRev > 0 ? tDesc/tRev*100 : 0;
   const kpis = [
-    { l:'VOLUME TOTAL',      v: fmt(tVol),     s:`${lastCalc.nMonths} mês(es)` },
-    { l:'REC. JVM4 BRUTA',   v: R(tRev),       s:'valor de serviço'            },
-    { l:'DESCONTO TOTAL',    v: R(tDesc),       s:`${pctD.toFixed(1)}% s/ bruta` },
-    { l:'REC. JVM4 LÍQUIDA', v: R(tRev-tDesc), s:'após descontos'               },
+    { l:'VOLUME TOTAL',      v: fmt(tVol),  s:`${lastCalc.nMonths} mês(es)` },
+    { l:'REC. JVM4 BRUTA',   v: R(tRev),    s:'valor de serviço' },
+    { l:'DESCONTO TOTAL',    v: R(tDesc),   s:`${pctD.toFixed(1)}% s/ bruta${incorporarIcms ? ' + ICMS: '+R(tIcms) : ''}` },
+    { l:'REC. JVM4 LÍQUIDA', v: R(tLiq),   s:`após descontos${incorporarIcms?' e ICMS':''}` },
   ];
   const kW = (cW - 3*3) / 4;
   kpis.forEach((k, idx) => {
     const x = mg + idx * (kW + 3);
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(x, y, kW, 20, 1.5, 1.5, 'FD');
     doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(148,163,184);
     doc.text(k.l, x + 3, y + 5);
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42);
     doc.text(k.v, x + 3, y + 12);
-    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(148,163,184);
+    doc.setFont('helvetica','normal'); doc.setFontSize(5.5); doc.setTextColor(148,163,184);
     doc.text(k.s, x + 3, y + 18);
   });
   y += 26;
 
-  // ── SCALE TABLE (flat, all categories) ───────────────────
+  // ── VALOR DE SERVIÇO ─────────────────────────────────────
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42);
-  doc.text('Escala de Descontos', mg, y);
+  doc.text('Valor de Serviço (R$/un.)', mg, y);
   y += 4;
 
-  // Build flat rows — category name only on first tier of each group
-  const firstIdxOf = {};
-  const flatRows = [];
-  CATS.forEach(cat => {
-    const tiers = s.escala[cat] || [];
-    tiers.forEach((t, i) => {
-      if (i === 0) firstIdxOf[flatRows.length] = cat;
-      flatRows.push([i === 0 ? cat : '', `${i+1}`, t.v.toLocaleString('pt-BR'), `${t.p}%`]);
-    });
-  });
+  const PRECO_ROWS_PDF = [
+    { label:'500ml',         sem:'500ml sem',         com:'500ml com'         },
+    { label:'1500ml',        sem:'1500ml sem',        com:'1500ml com'        },
+    { label:'5L',            sem:'5L',                com:null                },
+    { label:'350ml',         sem:'350ml sem',         com:'350ml com'         },
+    { label:'500ml premium', sem:'500ml premium sem', com:'500ml premium com'  },
+    { label:'10L',           sem:'10L',               com:null                },
+    { label:'Copo',          sem:'Copo',              com:null                },
+    { label:'500ml SW',      sem:'500ml SW',          com:null                },
+  ];
+  const pv     = k => (!k || !NOVA_CATS.includes(k)) ? '—' : (precosCat[k]||0).toFixed(2);
+  const pvIcms = k => (!k || !NOVA_CATS.includes(k)) ? '—' : ((precosCat[k]||0)/0.88).toFixed(2);
+
+  const precosBody = PRECO_ROWS_PDF
+    .filter(r => NOVA_CATS.includes(r.sem) || (r.com && NOVA_CATS.includes(r.com)))
+    .map(r => [r.label, pv(r.sem), pvIcms(r.sem), pv(r.com), pvIcms(r.com)]);
 
   doc.autoTable({
     startY: y,
     margin: { left: mg, right: mg },
-    head: [['Categoria', '#', 'Vol. Mínimo', 'Desc %']],
-    body: flatRows,
+    head: [['Categoria', 'Sem Gás', 'Sem Gás c/ICMS', 'Com Gás', 'Com Gás c/ICMS']],
+    body: precosBody,
     styles: { fontSize: 8, cellPadding: 2, textColor: [30,41,59] },
-    headStyles: {
-      fillColor: [51, 65, 85], textColor: 255, fontStyle: 'bold', fontSize: 8, cellPadding: 3,
-    },
+    headStyles: { fillColor: [51,65,85], textColor: 255, fontStyle:'bold', fontSize: 7.5, cellPadding: 2.5 },
     columnStyles: {
-      0: { fontStyle:'bold', cellWidth: 28 },
-      1: { halign:'center', cellWidth: 10, textColor:[100,116,139] },
-      2: { halign:'right' },
-      3: { halign:'right', fontStyle:'bold' },
+      0: { fontStyle:'bold', cellWidth: 34 },
+      1: { halign:'right' },
+      2: { halign:'right', textColor:[146,64,14], fontStyle:'bold' },
+      3: { halign:'right' },
+      4: { halign:'right', textColor:[146,64,14], fontStyle:'bold' },
     },
-    didParseCell: d => {
-      if (d.section !== 'body') return;
-      if (firstIdxOf[d.row.index] !== undefined) {
-        d.cell.styles.fillColor = [241, 245, 249];
-      }
-    },
+    alternateRowStyles: { fillColor: [248,250,252] },
     theme: 'plain',
-    tableLineColor: [226, 232, 240],
+    tableLineColor: [226,232,240],
     tableLineWidth: 0.2,
   });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // ── ESCALAS DE DESCONTO — 2 por linha ────────────────────
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42);
+  doc.text('Escala de Descontos', mg, y);
+  y += 4;
+
+  const colW  = (cW - 6) / 2;
+  const rightX = mg + colW + 6;
+  const CAT_RGB = { '500ml':[29,78,216], '1500ml':[21,128,61], '5L':[161,98,7], 'Demais':[126,34,206] };
+  const CAT_PAIRS = [['500ml','1500ml'], ['5L','Demais']];
+
+  const drawScaleTable = (cat, startY, leftMargin, rightMargin) => {
+    const tiers = s.escala[cat] || [];
+    const body  = tiers.map((t, i) => [`${i+1}`, t.v.toLocaleString('pt-BR'), `${t.p}%`]);
+    const rgb   = CAT_RGB[cat] || [51,65,85];
+    doc.autoTable({
+      startY,
+      margin: { left: leftMargin, right: rightMargin },
+      head: [[{ content: cat, colSpan: 3 }], ['#', 'Vol. Mínimo', 'Desc %']],
+      body,
+      styles: { fontSize: 8, cellPadding: 2, textColor: [30,41,59] },
+      headStyles: { fillColor: rgb, textColor: 255, fontStyle:'bold', fontSize: 8, cellPadding: 2.5 },
+      columnStyles: {
+        0: { halign:'center', cellWidth: 8, textColor:[100,116,139] },
+        1: { halign:'right' },
+        2: { halign:'right', fontStyle:'bold' },
+      },
+      alternateRowStyles: { fillColor: [248,250,252] },
+      theme: 'plain',
+      tableLineColor: [226,232,240],
+      tableLineWidth: 0.2,
+    });
+    return doc.lastAutoTable.finalY;
+  };
+
+  for (const [catL, catR] of CAT_PAIRS) {
+    const startY = y;
+    const finalL = drawScaleTable(catL, startY, mg, pageW - mg - colW);
+    const finalR = drawScaleTable(catR, startY, rightX, mg);
+    y = Math.max(finalL, finalR) + 8;
+  }
 
   // ── FOOTER ───────────────────────────────────────────────
   const total = doc.internal.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
     doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(148,163,184);
-    doc.text(`JVM4 — ${s.name} — ${tsLabel} — Pág. ${p}/${total}`, pageW/2, pageH - 5, { align:'center' });
+    doc.text(`JVM4 — Escala de Descontos — ${tsLabel} — Pág. ${p}/${total}`, pageW/2, pageH - 5, { align:'center' });
   }
 
-  doc.save(`EscalaDescontos_JVM4_${s.name.replace(/\s/g,'')}_${stamp}.pdf`);
+  doc.save(`EscalaDescontos_JVM4_${stamp}.pdf`);
 }
 
 function catColorRgb(cat) {
