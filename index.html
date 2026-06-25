@@ -1304,8 +1304,9 @@ function run() {
       const vol = row.volume * gMult;
       catVol[cat] += vol;
       catRev[cat] += vol * (row.classifNova ? (precosCat[row.classifNova] || 0) * icmsMult : 0);
-      if (!productData[cat][row.produto]) productData[cat][row.produto] = 0;
-      productData[cat][row.produto] += vol;
+      if (!productData[cat][row.produto]) productData[cat][row.produto] = {total: 0, byMonth: {}};
+      productData[cat][row.produto].total += vol;
+      productData[cat][row.produto].byMonth[row.data] = (productData[cat][row.produto].byMonth[row.data] || 0) + vol;
     });
     CATS.forEach(c => {
       catDesc[c] = catRev[c] * getDiscount(c, catVol[c]);
@@ -1325,8 +1326,10 @@ function run() {
         catRev[c]  += rev;
         catDesc[c] += desc;
         rows.forEach(d => {
-          if (!productData[c][d.produto]) productData[c][d.produto] = 0;
-          productData[c][d.produto] += d.volume * gMult;
+          if (!productData[c][d.produto]) productData[c][d.produto] = {total: 0, byMonth: {}};
+          const v = d.volume * gMult;
+          productData[c][d.produto].total += v;
+          productData[c][d.produto].byMonth[m] = (productData[c][d.produto].byMonth[m] || 0) + v;
         });
       });
     });
@@ -1338,7 +1341,7 @@ function run() {
   renderEditor();
   renderChart();
   if (detOpen) renderDetail(monthlyData, months);
-  if (prodDetOpen) renderProductDetail(productData);
+  if (prodDetOpen) renderProductDetail(productData, months);
 }
 
 // ============================================================
@@ -1388,8 +1391,18 @@ function renderKPI(catVol, catRev, catDesc, nMonths) {
         const cor   = ganho > 0 ? '#10b981' : '#ef4444';
         const sinal = ganho > 0 ? '+' : '';
         const label = ganho > 0 ? 'ganho simulado' : 'custo adicional';
+        const ganhoPisCofins = 600000;
+        const ganhoTotal = ganho + ganhoPisCofins;
+        const corTotal = ganhoTotal > 0 ? '#10b981' : '#ef4444';
+        const sinalTotal = ganhoTotal > 0 ? '+' : '';
         return `<div style="font-size:11px;font-weight:700;color:${cor};margin-top:3px">
           ${sinal}${R(ganho)} <span style="font-weight:400;font-size:9px">${label}</span>
+        </div>
+        <div style="font-size:10px;font-weight:700;color:#10b981;margin-top:2px">
+          +${R(ganhoPisCofins)} <span style="font-weight:400;font-size:9px">Ganho PIS/COFINS</span>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:${corTotal};margin-top:2px;border-top:1px solid #e2e8f0;padding-top:2px">
+          ${sinalTotal}${R(ganhoTotal)} <span style="font-weight:400;font-size:9px">ganho total</span>
         </div>`;
       })()}
     </div>`;
@@ -1483,47 +1496,58 @@ function toggleProductDetail() {
   if (prodDetOpen) run();
 }
 
-function renderProductDetail(productData) {
+function renderProductDetail(productData, months) {
   const container = document.getElementById('productDetailContent');
+  const thStyle = 'padding:3px 6px;font-size:10px;color:#64748b;font-weight:600;text-align:right;white-space:nowrap';
+  const tdStyle = 'padding:3px 6px;font-size:11px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap';
+
   const sections = CATS.map(cat => {
     const entries = Object.entries(productData[cat] || {})
-      .filter(([, vol]) => vol > 0)
-      .sort((a, b) => b[1] - a[1]);
+      .filter(([, d]) => d.total > 0)
+      .sort((a, b) => b[1].total - a[1].total);
     if (!entries.length) return '';
 
-    const totalCat = entries.reduce((s, [, v]) => s + v, 0);
+    const totalCat = entries.reduce((s, [, d]) => s + d.total, 0);
     const color = CAT_COLOR[cat] || '#64748b';
 
-    const rows = entries.map(([nome, vol]) => {
-      const pct = totalCat > 0 ? (vol / totalCat * 100) : 0;
-      const barW = Math.round(pct);
-      return `<tr>
-        <td style="padding:4px 8px;font-size:12px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nome}">${nome}</td>
-        <td class="mono" style="padding:4px 8px;font-size:12px;text-align:right">${fmt(Math.round(vol))}</td>
-        <td style="padding:4px 8px;width:100px">
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="flex:1;background:#e2e8f0;border-radius:3px;height:8px">
-              <div style="width:${barW}%;background:${color};border-radius:3px;height:8px"></div>
-            </div>
-            <span style="font-size:10px;color:#64748b;width:34px;text-align:right">${pct.toFixed(1)}%</span>
-          </div>
-        </td>
+    const monthCols = months.map(m => `<th style="${thStyle}">${m.replace('/','\n')}</th>`).join('');
+    const totalFootCols = months.map(m => {
+      const s = entries.reduce((acc, [, d]) => acc + (d.byMonth[m] || 0), 0);
+      return `<td style="${tdStyle};font-weight:700;border-top:1px solid #e2e8f0">${s > 0 ? fmt(Math.round(s)) : '—'}</td>`;
+    }).join('');
+
+    const rows = entries.map(([nome, d]) => {
+      const mCells = months.map(m => {
+        const v = d.byMonth[m] || 0;
+        return `<td style="${tdStyle};color:${v > 0 ? '#1e293b' : '#cbd5e1'}">${v > 0 ? fmt(Math.round(v)) : '—'}</td>`;
+      }).join('');
+      return `<tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:3px 6px;font-size:11px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nome}">${nome}</td>
+        ${mCells}
+        <td style="${tdStyle};font-weight:700;color:${color}">${fmt(Math.round(d.total))}</td>
       </tr>`;
     }).join('');
 
-    return `<div style="margin-bottom:16px">
+    return `<div style="margin-bottom:16px;overflow-x:auto">
       <div style="font-weight:700;font-size:13px;color:${color};padding:6px 8px;border-left:3px solid ${color};background:#f8fafc;margin-bottom:4px">
         ${cat} &nbsp;<span style="font-weight:400;color:#64748b;font-size:11px">${entries.length} produto(s) · ${fmt(Math.round(totalCat))} unid.</span>
       </div>
-      <table style="width:100%;border-collapse:collapse">
+      <table style="width:100%;border-collapse:collapse;min-width:${200 + months.length * 80}px">
         <thead>
           <tr style="background:#f1f5f9">
-            <th style="padding:4px 8px;text-align:left;font-size:11px;color:#64748b;font-weight:600">Produto</th>
-            <th style="padding:4px 8px;text-align:right;font-size:11px;color:#64748b;font-weight:600">Volume</th>
-            <th style="padding:4px 8px;font-size:11px;color:#64748b;font-weight:600">Participação</th>
+            <th style="padding:3px 6px;text-align:left;font-size:10px;color:#64748b;font-weight:600;min-width:160px">Produto</th>
+            ${monthCols}
+            <th style="${thStyle};color:${color}">Total</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
+        <tfoot>
+          <tr style="background:#f8fafc">
+            <td style="padding:3px 6px;font-size:11px;font-weight:700">Total</td>
+            ${totalFootCols}
+            <td style="${tdStyle};font-weight:700;color:${color};border-top:1px solid #e2e8f0">${fmt(Math.round(totalCat))}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>`;
   }).join('');
