@@ -491,6 +491,14 @@ function doLogin() {
       " onmouseover="this.style.background='#f5f3ff'" onmouseout="this.style.background='#f8fafc'">
         &#128196; PDF
       </button>
+      <button onclick="openWhatIf()" style="
+        display:flex;align-items:center;gap:5px;
+        padding:5px 12px;border-radius:7px;border:1px solid #ccfbf1;
+        background:#f0fdfa;color:#0f766e;font-size:11px;font-weight:700;
+        cursor:pointer;transition:all .12s;
+      " onmouseover="this.style.background='#ccfbf1'" onmouseout="this.style.background='#f0fdfa'">
+        &#9654; Análise
+      </button>
     </div>
   </div>
 
@@ -590,6 +598,16 @@ function doLogin() {
     <div style="padding:4px 0" id="productDetailContent"></div>
   </div>
 
+</div>
+
+<!-- WHAT-IF OVERLAY -->
+<div id="whatIfOverlay" style="display:none;position:fixed;inset:0;background:#f8fafc;z-index:900;overflow-y:auto">
+  <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;align-items:center;gap:12px;z-index:1">
+    <div style="font-weight:800;font-size:15px;color:#0f172a">Análise de Impacto da Reclassificação</div>
+    <div style="font-size:11px;color:#64748b;flex:1">350ml · SW 500ml · Premium 500ml fora do 500ml</div>
+    <button onclick="closeWhatIf()" style="padding:5px 14px;border-radius:7px;border:1px solid #e2e8f0;background:#f8fafc;font-size:11px;font-weight:700;cursor:pointer;color:#64748b">✕ Fechar</button>
+  </div>
+  <div id="whatIfContent" style="padding:20px;max-width:1200px;margin:0 auto"></div>
 </div>
 
 <!-- DATA -->
@@ -1775,6 +1793,228 @@ function R(n)     { return 'R$ ' + n.toLocaleString('pt-BR',{minimumFractionDigi
 
 // ============================================================
 init();
+
+// ============================================================
+// WHAT-IF ANALYSIS
+// ============================================================
+const WHAT_IF_NOVAS = new Set(['350ml sem','350ml com','500ml SW','500ml premium sem','500ml premium com']);
+const WHAT_IF_LABELS = ['350ml sem','350ml com','500ml SW','500ml premium sem','500ml premium com'];
+
+function openWhatIf() {
+  document.getElementById('whatIfOverlay').style.display = 'block';
+  renderWhatIf();
+}
+function closeWhatIf() {
+  document.getElementById('whatIfOverlay').style.display = 'none';
+}
+
+function renderWhatIf() {
+  const months = [...selMonths].sort((a,b) => allMonths.indexOf(a) - allMonths.indexOf(b));
+  const data   = dadosRaw.filter(d => selMonths.has(d.data));
+  const gMult  = 1 + growthPct / 100;
+  const icmsMult = incorporarIcms ? (1 / 0.88) : 1;
+  const esc    = escala();
+
+  function calcCat(mData, catFn) {
+    const r = mData.filter(catFn);
+    const vol = r.reduce((s,d) => s + d.volume * gMult, 0);
+    const rev = r.reduce((s,d) => s + d.volume * gMult * (d.classifNova ? (precosCat[d.classifNova]||0)*icmsMult : 0), 0);
+    return { vol, rev };
+  }
+
+  // Per-month rows
+  const rows = months.map(m => {
+    const md = data.filter(d => d.data === m);
+
+    const a500    = calcCat(md, d => d.classif === '500ml');
+    const aDemais = calcCat(md, d => d.classif === 'Demais');
+    const b500    = calcCat(md, d => d.classif === '500ml' && !WHAT_IF_NOVAS.has(d.classifNova));
+    const bDemais = calcCat(md, d => d.classif === 'Demais' || (d.classif === '500ml' && WHAT_IF_NOVAS.has(d.classifNova)));
+
+    [a500, b500].forEach(x => { x.pct = getDiscount('500ml',   x.vol); x.descR = x.rev * x.pct; x.tier = activeTierIdx('500ml',   x.vol); });
+    [aDemais, bDemais].forEach(x => { x.pct = getDiscount('Demais', x.vol); x.descR = x.rev * x.pct; x.tier = activeTierIdx('Demais', x.vol); });
+
+    return { m, a500, aDemais, b500, bDemais };
+  });
+
+  // Accumulated totals (for escala section)
+  const tot = {
+    vol500A:    rows.reduce((s,r) => s + r.a500.vol,    0),
+    vol500B:    rows.reduce((s,r) => s + r.b500.vol,    0),
+    volDemaisA: rows.reduce((s,r) => s + r.aDemais.vol, 0),
+    volDemaisB: rows.reduce((s,r) => s + r.bDemais.vol, 0),
+  };
+
+  // ── helpers ──
+  const th = (t,extra='') => `<th style="padding:5px 8px;font-size:10px;color:#64748b;font-weight:600;text-align:right;white-space:nowrap${extra}">${t}</th>`;
+  const td = (v,extra='') => `<td style="padding:4px 8px;font-size:11px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap${extra}">${v}</td>`;
+  const tdL = (v,extra='') => `<td style="padding:4px 8px;font-size:11px;white-space:nowrap${extra}">${v}</td>`;
+  const pctStr = p => p > 0 ? `${(p*100).toFixed(1)}%` : '—';
+  const tierLabel = (cat, i) => i >= 0 ? `Faixa ${i+1} (≥${fmt((esc[cat]||[])[i]?.v||0)})` : 'Sem faixa';
+  const diffStyle = d => d < -0.001 ? ';color:#ef4444;font-weight:700' : d > 0.001 ? ';color:#10b981;font-weight:700' : ';color:#94a3b8';
+
+  // ── Tabela 500ml ──
+  const thead500 = `<tr style="background:#eff6ff">
+    <th style="padding:5px 8px;text-align:left;font-size:10px;color:#1d4ed8;font-weight:700" rowspan="2">Mês</th>
+    <th colspan="3" style="padding:5px 8px;font-size:10px;color:#1d4ed8;font-weight:700;text-align:center;border-left:2px solid #bfdbfe">Atual (com 350ml / SW / Premium)</th>
+    <th colspan="3" style="padding:5px 8px;font-size:10px;color:#64748b;font-weight:700;text-align:center;border-left:2px solid #e2e8f0">Sem reclassificação</th>
+    <th colspan="2" style="padding:5px 8px;font-size:10px;color:#64748b;font-weight:700;text-align:center;border-left:2px solid #e2e8f0">Diferença</th>
+  </tr>
+  <tr style="background:#eff6ff">
+    ${th('Volume',';border-left:2px solid #bfdbfe')}${th('Desc %')}${th('Desc R$')}
+    ${th('Volume',';border-left:2px solid #e2e8f0')}${th('Desc %')}${th('Desc R$')}
+    ${th('Δ Volume',';border-left:2px solid #e2e8f0')}${th('Δ Desc R$')}
+  </tr>`;
+
+  const tbody500 = rows.map((r,i) => {
+    const dVol  = r.b500.vol   - r.a500.vol;
+    const dDesc = r.b500.descR - r.a500.descR;
+    const bg = i%2===0 ? '' : ';background:#f8fafc';
+    return `<tr>
+      ${tdL(`<b>${r.m}</b>`,bg)}
+      ${td(fmt(Math.round(r.a500.vol)),   ';border-left:2px solid #bfdbfe'+bg)}
+      ${td(pctStr(r.a500.pct),           bg + (r.a500.pct>0?';color:#1d4ed8;font-weight:700':''))}
+      ${td(r.a500.rev>0 ? R(r.a500.descR) : '—', bg)}
+      ${td(fmt(Math.round(r.b500.vol)),   ';border-left:2px solid #e2e8f0'+bg)}
+      ${td(pctStr(r.b500.pct),           bg + (r.b500.pct>0?';color:#64748b;font-weight:700':''))}
+      ${td(r.b500.rev>0 ? R(r.b500.descR) : '—', bg)}
+      ${td(fmt(Math.round(dVol)),         ';border-left:2px solid #e2e8f0'+bg+diffStyle(dVol))}
+      ${td(dDesc !== 0 ? R(dDesc) : '—', bg+diffStyle(dDesc))}
+    </tr>`;
+  }).join('');
+
+  const tfoot500 = `<tr style="background:#dbeafe;font-weight:700">
+    ${tdL('<b>Total</b>')}
+    ${td(fmt(Math.round(tot.vol500A)), ';border-left:2px solid #bfdbfe')}
+    ${td(pctStr(getDiscount('500ml', tot.vol500A)))}
+    ${td(R(rows.reduce((s,r)=>s+r.a500.descR,0)))}
+    ${td(fmt(Math.round(tot.vol500B)), ';border-left:2px solid #e2e8f0')}
+    ${td(pctStr(getDiscount('500ml', tot.vol500B)))}
+    ${td(R(rows.reduce((s,r)=>s+r.b500.descR,0)))}
+    ${td(fmt(Math.round(tot.vol500B-tot.vol500A)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.vol500B-tot.vol500A))}
+    ${td(R(rows.reduce((s,r)=>s+r.b500.descR-r.a500.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.b500.descR-r.a500.descR,0)))}
+  </tr>`;
+
+  // ── Tabela Demais ──
+  const theadDemais = `<tr style="background:#faf5ff">
+    <th style="padding:5px 8px;text-align:left;font-size:10px;color:#7e22ce;font-weight:700" rowspan="2">Mês</th>
+    <th colspan="3" style="padding:5px 8px;font-size:10px;color:#7e22ce;font-weight:700;text-align:center;border-left:2px solid #e9d5ff">Atual</th>
+    <th colspan="3" style="padding:5px 8px;font-size:10px;color:#64748b;font-weight:700;text-align:center;border-left:2px solid #e2e8f0">Sem reclassificação</th>
+    <th colspan="2" style="padding:5px 8px;font-size:10px;color:#64748b;font-weight:700;text-align:center;border-left:2px solid #e2e8f0">Diferença</th>
+  </tr>
+  <tr style="background:#faf5ff">
+    ${th('Volume',';border-left:2px solid #e9d5ff')}${th('Desc %')}${th('Desc R$')}
+    ${th('Volume',';border-left:2px solid #e2e8f0')}${th('Desc %')}${th('Desc R$')}
+    ${th('Δ Volume',';border-left:2px solid #e2e8f0')}${th('Δ Desc R$')}
+  </tr>`;
+
+  const tbodyDemais = rows.map((r,i) => {
+    const dVol  = r.bDemais.vol   - r.aDemais.vol;
+    const dDesc = r.bDemais.descR - r.aDemais.descR;
+    const bg = i%2===0 ? '' : ';background:#f8fafc';
+    return `<tr>
+      ${tdL(`<b>${r.m}</b>`,bg)}
+      ${td(fmt(Math.round(r.aDemais.vol)),   ';border-left:2px solid #e9d5ff'+bg)}
+      ${td(pctStr(r.aDemais.pct),           bg + (r.aDemais.pct>0?';color:#7e22ce;font-weight:700':''))}
+      ${td(r.aDemais.rev>0 ? R(r.aDemais.descR) : '—', bg)}
+      ${td(fmt(Math.round(r.bDemais.vol)),   ';border-left:2px solid #e2e8f0'+bg)}
+      ${td(pctStr(r.bDemais.pct),           bg + (r.bDemais.pct>0?';color:#64748b;font-weight:700':''))}
+      ${td(r.bDemais.rev>0 ? R(r.bDemais.descR) : '—', bg)}
+      ${td(fmt(Math.round(dVol)),            ';border-left:2px solid #e2e8f0'+bg+diffStyle(dVol))}
+      ${td(dDesc !== 0 ? R(dDesc) : '—',    bg+diffStyle(dDesc))}
+    </tr>`;
+  }).join('');
+
+  const tfootDemais = `<tr style="background:#ede9fe;font-weight:700">
+    ${tdL('<b>Total</b>')}
+    ${td(fmt(Math.round(tot.volDemaisA)), ';border-left:2px solid #e9d5ff')}
+    ${td(pctStr(getDiscount('Demais', tot.volDemaisA)))}
+    ${td(R(rows.reduce((s,r)=>s+r.aDemais.descR,0)))}
+    ${td(fmt(Math.round(tot.volDemaisB)), ';border-left:2px solid #e2e8f0')}
+    ${td(pctStr(getDiscount('Demais', tot.volDemaisB)))}
+    ${td(R(rows.reduce((s,r)=>s+r.bDemais.descR,0)))}
+    ${td(fmt(Math.round(tot.volDemaisB-tot.volDemaisA)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.volDemaisB-tot.volDemaisA))}
+    ${td(R(rows.reduce((s,r)=>s+r.bDemais.descR-r.aDemais.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.bDemais.descR-r.aDemais.descR,0)))}
+  </tr>`;
+
+  // ── Escala comparativa (acumulado) ──
+  function escalaTable(cat, volA, volB, color, bgHead) {
+    const tiers = esc[cat] || [];
+    const tierA = activeTierIdx(cat, volA);
+    const tierB = activeTierIdx(cat, volB);
+    const tRows = tiers.map((t,i) => {
+      const isA = i === tierA, isB = i === tierB;
+      const bg = isA && isB ? 'background:#dcfce7' : isA ? 'background:#dbeafe' : isB ? 'background:#fef9c3' : '';
+      const badge = isA && isB ? ' <span style="font-size:9px;background:#16a34a;color:#fff;padding:1px 4px;border-radius:3px">A e B</span>'
+                  : isA       ? ' <span style="font-size:9px;background:#1d4ed8;color:#fff;padding:1px 4px;border-radius:3px">Atual</span>'
+                  : isB       ? ' <span style="font-size:9px;background:#ca8a04;color:#fff;padding:1px 4px;border-radius:3px">Sem Reclassif</span>'
+                  : '';
+      return `<tr style="${bg}">
+        <td style="padding:4px 8px;font-size:11px">Faixa ${i+1}${badge}</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right">≥ ${fmt(t.v)}</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right;font-weight:${isA||isB?'700':'400'};color:${isA||isB?color:'#64748b'}">${(t.p).toFixed(1)}%</td>
+      </tr>`;
+    }).join('');
+    return `<div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+        <thead><tr style="background:${bgHead}">
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:${color};font-weight:700">Faixa</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:${color};font-weight:700">Vol. mín.</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:${color};font-weight:700">Desc %</th>
+        </tr></thead>
+        <tbody>${tRows}</tbody>
+      </table>
+      <div style="margin-top:6px;font-size:10px;color:#64748b">
+        Atual (A): <b>${fmt(Math.round(volA))}</b> unid. acumuladas →
+        <b style="color:${color}">${pctStr(getDiscount(cat,volA))}</b>
+        &nbsp;|&nbsp;
+        Sem reclassif (B): <b>${fmt(Math.round(volB))}</b> unid. →
+        <b style="color:#ca8a04">${pctStr(getDiscount(cat,volB))}</b>
+      </div>
+    </div>`;
+  }
+
+  // ── Assemble ──
+  const tblStyle = 'width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:12px';
+  document.getElementById('whatIfContent').innerHTML = `
+
+    <div style="background:#fefce8;border:1px solid #fef08a;border-radius:8px;padding:10px 14px;margin-bottom:20px;font-size:12px;color:#713f12">
+      <b>Produtos analisados (movidos de volta a Demais no cenário B):</b>
+      ${WHAT_IF_LABELS.map(l=>`<span style="background:#fef9c3;border:1px solid #fde047;border-radius:4px;padding:1px 6px;margin:0 3px;font-size:11px">${l}</span>`).join('')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:6px">
+      <div style="font-size:11px;color:#64748b"><span style="display:inline-block;width:10px;height:10px;background:#dbeafe;border-radius:2px;margin-right:4px"></span>Azul = faixa atingida no cenário Atual</div>
+      <div style="font-size:11px;color:#64748b"><span style="display:inline-block;width:10px;height:10px;background:#fef9c3;border-radius:2px;margin-right:4px"></span>Amarelo = faixa atingida no cenário Sem Reclassificação</div>
+    </div>
+
+    <h3 style="font-size:13px;font-weight:700;color:#1d4ed8;margin:20px 0 6px">500ml — Por mês</h3>
+    <div style="overflow-x:auto"><table style="${tblStyle}">
+      <thead>${thead500}</thead>
+      <tbody>${tbody500}</tbody>
+      <tfoot>${tfoot500}</tfoot>
+    </table></div>
+
+    <h3 style="font-size:13px;font-weight:700;color:#7e22ce;margin:24px 0 6px">Demais — Por mês</h3>
+    <div style="overflow-x:auto"><table style="${tblStyle}">
+      <thead>${theadDemais}</thead>
+      <tbody>${tbodyDemais}</tbody>
+      <tfoot>${tfootDemais}</tfoot>
+    </table></div>
+
+    <h3 style="font-size:13px;font-weight:700;color:#0f172a;margin:24px 0 10px">Escala de Desconto — Comparativo (volume acumulado dos meses selecionados)</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px">500ml</div>
+        ${escalaTable('500ml', tot.vol500A, tot.vol500B, '#1d4ed8', '#eff6ff')}
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#7e22ce;margin-bottom:6px">Demais</div>
+        ${escalaTable('Demais', tot.volDemaisA, tot.volDemaisB, '#7e22ce', '#faf5ff')}
+      </div>
+    </div>
+  `;
+}
 </script>
 </body>
 </html>
