@@ -666,15 +666,24 @@ const scenarios = [
     name: 'Cenário 2',
     escala: {
       "500ml" : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:14},{v:225000,p:16},{v:250000,p:18},{v:275000,p:20},{v:300000,p:22},{v:325000,p:24},{v:350000,p:26},{v:375000,p:28},{v:400000,p:30},{v:425000,p:32},{v:450000,p:35}],
-      "1500ml": [{v:50000,p:10},{v:70000,p:12},{v:90000,p:14},{v:100000,p:16},{v:110000,p:18},{v:120000,p:20},{v:130000,p:22}],
-      "5L"    : [{v:40000,p:10},{v:50000,p:12},{v:60000,p:14},{v:70000,p:16},{v:80000,p:18},{v:90000,p:20},{v:100000,p:22}],
-      "Demais": [{v:60000,p:8},{v:70000,p:9},{v:80000,p:10},{v:90000,p:11},{v:100000,p:12},{v:110000,p:13},{v:120000,p:14}]
+      "1500ml": [{v:150000,p:11}],
+      "5L"    : [{v:150000,p:11}],
+      "Demais": [{v:150000,p:6}]
     }
   }
 ];
 
 const activeScenario = 0;
 const escala = () => scenarios[0].escala;
+
+// Migra escala antiga (multi-faixa) para o novo formato de faixa única
+function migrateEscala(e) {
+  const out = Object.assign({}, e);
+  if (!out['1500ml'] || out['1500ml'].length > 1) out['1500ml'] = [{v:150000,p:11}];
+  if (!out['5L']     || out['5L'].length     > 1) out['5L']     = [{v:150000,p:11}];
+  if (!out['Demais'] || out['Demais'].length > 1) out['Demais'] = [{v:150000,p:6}];
+  return out;
+}
 
 // ── Valor de Serviço por categoria classifNova (R$/un.) ──────
 let precosCat = {};
@@ -874,7 +883,7 @@ async function loadFromSupabase() {
       .single();
     if (!error && data) {
       scenarios[0].name   = data.nome;
-      scenarios[0].escala = data.escala;
+      scenarios[0].escala = migrateEscala(data.escala);
       if (data.precos && NOVA_CATS.every(c => data.precos[c] !== undefined)) {
         precosCat = data.precos;
       }
