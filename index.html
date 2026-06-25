@@ -582,6 +582,14 @@ function doLogin() {
     </div>
   </div>
 
+  <!-- PRODUCT DETAIL TOGGLE -->
+  <button class="detail-toggle" onclick="toggleProductDetail()" style="margin-top:8px">
+    <span id="prodDetLabel">&#9660; Detalhamento por produto</span>
+  </button>
+  <div class="detail-wrap panel" id="productDetailWrap">
+    <div style="padding:4px 0" id="productDetailContent"></div>
+  </div>
+
 </div>
 
 <!-- DATA -->
@@ -822,6 +830,7 @@ let mode       = 'mensal';
 let activeCat  = '500ml';
 let chartCat   = '500ml';
 let detOpen    = false;
+let prodDetOpen = false;
 let ddOpen     = false;
 let volChart   = null;
 let chartOpen  = false;
@@ -1284,14 +1293,19 @@ function run() {
   const gMult    = 1 + growthPct / 100;
   const icmsMult = incorporarIcms ? (1 / 0.88) : 1;
 
+  // Dados por produto (usa classif diretamente, respeitando classificação por mês)
+  const productData = {};
+  CATS.forEach(c => { productData[c] = {}; });
+
   if (mode === 'acumulado') {
     data.forEach(row => {
-      const nova = row.classifNova;
-      const cat  = nova ? (NOVA_TO_CAT[nova] || nova) : row.classif;
+      const cat = row.classif;
       if (!CATS.includes(cat)) return;
       const vol = row.volume * gMult;
       catVol[cat] += vol;
-      catRev[cat] += vol * (nova ? (precosCat[nova] || 0) * icmsMult : 0);
+      catRev[cat] += vol * (row.classifNova ? (precosCat[row.classifNova] || 0) * icmsMult : 0);
+      if (!productData[cat][row.produto]) productData[cat][row.produto] = 0;
+      productData[cat][row.produto] += vol;
     });
     CATS.forEach(c => {
       catDesc[c] = catRev[c] * getDiscount(c, catVol[c]);
@@ -1300,20 +1314,20 @@ function run() {
     months.forEach(m => {
       const mRows = data.filter(d => d.data===m);
       CATS.forEach(c => {
-        const rows = mRows.filter(d => {
-          const nova = d.classifNova;
-          return nova ? (NOVA_TO_CAT[nova] || nova) === c : d.classif === c;
-        });
+        const rows = mRows.filter(d => d.classif === c);
         const vol = rows.reduce((s,d) => s + d.volume * gMult, 0);
         const rev = rows.reduce((s,d) => {
-          const nova = d.classifNova;
-          return s + d.volume * gMult * (nova ? (precosCat[nova] || 0) * icmsMult : 0);
+          return s + d.volume * gMult * (d.classifNova ? (precosCat[d.classifNova] || 0) * icmsMult : 0);
         }, 0);
         const desc = rev * getDiscount(c, vol);
         monthlyData[m][c] = {vol, rev, desc};
         catVol[c]  += vol;
         catRev[c]  += rev;
         catDesc[c] += desc;
+        rows.forEach(d => {
+          if (!productData[c][d.produto]) productData[c][d.produto] = 0;
+          productData[c][d.produto] += d.volume * gMult;
+        });
       });
     });
   }
@@ -1324,6 +1338,7 @@ function run() {
   renderEditor();
   renderChart();
   if (detOpen) renderDetail(monthlyData, months);
+  if (prodDetOpen) renderProductDetail(productData);
 }
 
 // ============================================================
@@ -1458,6 +1473,62 @@ function toggleDetail() {
   document.querySelector('.detail-toggle span:first-child').textContent =
     (detOpen?'▲':'▼') + ' Detalhamento mensal por categoria';
   if (detOpen) run();
+}
+
+function toggleProductDetail() {
+  prodDetOpen = !prodDetOpen;
+  document.getElementById('productDetailWrap').classList.toggle('open', prodDetOpen);
+  document.getElementById('prodDetLabel').textContent =
+    (prodDetOpen?'▲':'▼') + ' Detalhamento por produto';
+  if (prodDetOpen) run();
+}
+
+function renderProductDetail(productData) {
+  const container = document.getElementById('productDetailContent');
+  const sections = CATS.map(cat => {
+    const entries = Object.entries(productData[cat] || {})
+      .filter(([, vol]) => vol > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return '';
+
+    const totalCat = entries.reduce((s, [, v]) => s + v, 0);
+    const color = CAT_COLOR[cat] || '#64748b';
+
+    const rows = entries.map(([nome, vol]) => {
+      const pct = totalCat > 0 ? (vol / totalCat * 100) : 0;
+      const barW = Math.round(pct);
+      return `<tr>
+        <td style="padding:4px 8px;font-size:12px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nome}">${nome}</td>
+        <td class="mono" style="padding:4px 8px;font-size:12px;text-align:right">${fmt(Math.round(vol))}</td>
+        <td style="padding:4px 8px;width:100px">
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="flex:1;background:#e2e8f0;border-radius:3px;height:8px">
+              <div style="width:${barW}%;background:${color};border-radius:3px;height:8px"></div>
+            </div>
+            <span style="font-size:10px;color:#64748b;width:34px;text-align:right">${pct.toFixed(1)}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:700;font-size:13px;color:${color};padding:6px 8px;border-left:3px solid ${color};background:#f8fafc;margin-bottom:4px">
+        ${cat} &nbsp;<span style="font-weight:400;color:#64748b;font-size:11px">${entries.length} produto(s) · ${fmt(Math.round(totalCat))} unid.</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f1f5f9">
+            <th style="padding:4px 8px;text-align:left;font-size:11px;color:#64748b;font-weight:600">Produto</th>
+            <th style="padding:4px 8px;text-align:right;font-size:11px;color:#64748b;font-weight:600">Volume</th>
+            <th style="padding:4px 8px;font-size:11px;color:#64748b;font-weight:600">Participação</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = sections || '<p style="color:#64748b;padding:12px">Nenhum dado para os meses selecionados.</p>';
 }
 
 // ============================================================
