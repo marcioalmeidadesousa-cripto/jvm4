@@ -1867,8 +1867,8 @@ function renderWhatIf() {
   </tr>`;
 
   const tbody500 = rows.map((r,i) => {
-    const dVol  = r.b500.vol   - r.a500.vol;
-    const dDesc = r.b500.descR - r.a500.descR;
+    const dVol  = r.a500.vol   - r.b500.vol;
+    const dDesc = r.a500.descR - r.b500.descR;
     const bg = i%2===0 ? '' : ';background:#f8fafc';
     return `<tr>
       ${tdL(`<b>${r.m}</b>`,bg)}
@@ -1891,8 +1891,8 @@ function renderWhatIf() {
     ${td(fmt(Math.round(tot.vol500B)), ';border-left:2px solid #e2e8f0')}
     ${td(pctStr(getDiscount('500ml', tot.vol500B)))}
     ${td(R(rows.reduce((s,r)=>s+r.b500.descR,0)))}
-    ${td(fmt(Math.round(tot.vol500B-tot.vol500A)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.vol500B-tot.vol500A))}
-    ${td(R(rows.reduce((s,r)=>s+r.b500.descR-r.a500.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.b500.descR-r.a500.descR,0)))}
+    ${td(fmt(Math.round(tot.vol500A-tot.vol500B)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.vol500A-tot.vol500B))}
+    ${td(R(rows.reduce((s,r)=>s+r.a500.descR-r.b500.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.a500.descR-r.b500.descR,0)))}
   </tr>`;
 
   // ── Tabela Demais ──
@@ -1909,8 +1909,8 @@ function renderWhatIf() {
   </tr>`;
 
   const tbodyDemais = rows.map((r,i) => {
-    const dVol  = r.bDemais.vol   - r.aDemais.vol;
-    const dDesc = r.bDemais.descR - r.aDemais.descR;
+    const dVol  = r.aDemais.vol   - r.bDemais.vol;
+    const dDesc = r.aDemais.descR - r.bDemais.descR;
     const bg = i%2===0 ? '' : ';background:#f8fafc';
     return `<tr>
       ${tdL(`<b>${r.m}</b>`,bg)}
@@ -1933,8 +1933,8 @@ function renderWhatIf() {
     ${td(fmt(Math.round(tot.volDemaisB)), ';border-left:2px solid #e2e8f0')}
     ${td(pctStr(getDiscount('Demais', tot.volDemaisB)))}
     ${td(R(rows.reduce((s,r)=>s+r.bDemais.descR,0)))}
-    ${td(fmt(Math.round(tot.volDemaisB-tot.volDemaisA)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.volDemaisB-tot.volDemaisA))}
-    ${td(R(rows.reduce((s,r)=>s+r.bDemais.descR-r.aDemais.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.bDemais.descR-r.aDemais.descR,0)))}
+    ${td(fmt(Math.round(tot.volDemaisA-tot.volDemaisB)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.volDemaisA-tot.volDemaisB))}
+    ${td(R(rows.reduce((s,r)=>s+r.aDemais.descR-r.bDemais.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.aDemais.descR-r.bDemais.descR,0)))}
   </tr>`;
 
   // ── Escala comparativa (acumulado) ──
