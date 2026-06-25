@@ -666,22 +666,43 @@ const scenarios = [
     name: 'Cenário 2',
     escala: {
       "500ml" : [{v:150000,p:10},{v:175000,p:12},{v:200000,p:14},{v:225000,p:16},{v:250000,p:18},{v:275000,p:20},{v:300000,p:22},{v:325000,p:24},{v:350000,p:26},{v:375000,p:28},{v:400000,p:30},{v:425000,p:32},{v:450000,p:35}],
-      "1500ml": [{v:150000,p:11}],
-      "5L"    : [{v:150000,p:11}],
-      "Demais": [{v:150000,p:6}]
-    }
+      "1500ml": [],
+      "5L"    : [],
+      "Demais": []
+    },
+    combinedEscala: [
+      { v:150000, '1500ml':11, '5L':11, 'Demais':6 },
+      { v:175000, '1500ml':11, '5L':11, 'Demais':6 },
+      { v:200000, '1500ml':11, '5L':11, 'Demais':6 },
+      { v:225000, '1500ml':11, '5L':11, 'Demais':6 },
+      { v:250000, '1500ml':11, '5L':11, 'Demais':6 },
+    ]
   }
 ];
 
 const activeScenario = 0;
 const escala = () => scenarios[0].escala;
+const COMBINED_CATS = ['1500ml', '5L', 'Demais'];
 
-// Migra escala antiga (multi-faixa) para o novo formato de faixa única
+// 1500ml, 5L e Demais usam escala combinada (gatilho = soma dos três)
+function activeCombinedTierIdx(combinedVol) {
+  const tiers = scenarios[0].combinedEscala || [];
+  let best = -1, bestVol = -1;
+  tiers.forEach((t,i) => { if (combinedVol >= t.v && t.v >= bestVol) { best=i; bestVol=t.v; } });
+  return best;
+}
+function getCombinedDiscount(classif, combinedVol) {
+  const i = activeCombinedTierIdx(combinedVol);
+  if (i < 0) return 0;
+  return ((scenarios[0].combinedEscala[i][classif]) || 0) / 100;
+}
+
+// Remove faixas individuais das cats combinadas (agora usam combinedEscala)
 function migrateEscala(e) {
   const out = Object.assign({}, e);
-  if (!out['1500ml'] || out['1500ml'].length > 1) out['1500ml'] = [{v:150000,p:11}];
-  if (!out['5L']     || out['5L'].length     > 1) out['5L']     = [{v:150000,p:11}];
-  if (!out['Demais'] || out['Demais'].length > 1) out['Demais'] = [{v:150000,p:6}];
+  out['1500ml'] = [];
+  out['5L']     = [];
+  out['Demais'] = [];
   return out;
 }
 
@@ -883,7 +904,12 @@ async function loadFromSupabase() {
       .single();
     if (!error && data) {
       scenarios[0].name   = data.nome;
-      scenarios[0].escala = migrateEscala(data.escala);
+      const loadedEscala  = data.escala || {};
+      const savedCombined = loadedEscala._combined;
+      const escalaOnly    = Object.assign({}, loadedEscala);
+      delete escalaOnly._combined;
+      scenarios[0].escala = migrateEscala(escalaOnly);
+      if (savedCombined && Array.isArray(savedCombined)) scenarios[0].combinedEscala = savedCombined;
       if (data.precos && NOVA_CATS.every(c => data.precos[c] !== undefined)) {
         precosCat = data.precos;
       }
@@ -914,9 +940,10 @@ async function saveAll() {
   savePrecosCat();
   let ok = true;
   try {
+    const escalaSave = Object.assign({}, scenarios[0].escala, { _combined: scenarios[0].combinedEscala });
     const { error } = await supa
       .from('jvm4_cenarios')
-      .update({ nome: scenarios[0].name, escala: scenarios[0].escala, precos: precosCat, updated_at: new Date().toISOString() })
+      .update({ nome: scenarios[0].name, escala: escalaSave, precos: precosCat, updated_at: new Date().toISOString() })
       .eq('id', 2);
     if (error) ok = false;
   } catch(e) { ok = false; }
@@ -1101,6 +1128,7 @@ function setChartCat(c) {
 // SCALE EDITOR
 // ============================================================
 function renderEditor() {
+  if (COMBINED_CATS.includes(activeCat)) { renderCombinedEditor(); return; }
   const tiers = escala()[activeCat];
   const filtered = dadosRaw.filter(d => selMonths.has(d.data) && d.classif === activeCat);
 
@@ -1175,6 +1203,82 @@ function addTier(sIdx, cat) {
   t.push({ v: t.length ? t[t.length-1].v+25000 : 0, p: t.length ? t[t.length-1].p+2 : 5 });
   renderEditor(); run();
   markDirty();
+}
+
+// ── Editor combinado (1500ml + 5L + Demais) ─────────────────
+function renderCombinedEditor() {
+  const sIdx = activeScenario;
+  const tiers = scenarios[sIdx].combinedEscala || [];
+  const gm = 1 + growthPct / 100;
+  const filtered = dadosRaw.filter(d => selMonths.has(d.data) && COMBINED_CATS.includes(d.classif));
+  let refVol;
+  if (mode === 'acumulado') {
+    refVol = filtered.reduce((s,d) => s + d.volume * gm, 0);
+  } else {
+    const byM = {};
+    filtered.forEach(d => { byM[d.data] = (byM[d.data]||0) + d.volume * gm; });
+    const vals = Object.values(byM);
+    refVol = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  }
+  const hitIdx = activeCombinedTierIdx(refVol);
+  document.getElementById('scaleEditor').innerHTML = `
+    <div style="font-size:10px;color:#64748b;margin-bottom:6px">Gatilho: volume combinado de 1500ml + 5L + Demais</div>
+    <table class="sc-table" style="width:100%">
+      <thead><tr>
+        <th style="width:22px">#</th>
+        <th>Vol. Mín. combinado</th>
+        <th style="width:72px">1500ml %</th>
+        <th style="width:60px">5L %</th>
+        <th style="width:72px">Demais %</th>
+        <th style="width:24px"></th>
+      </tr></thead>
+      <tbody>
+        ${tiers.map((t,i) => `
+          <tr class="${i===hitIdx?'hit':''}">
+            <td><span class="tier-num">${i+1}</span></td>
+            <td><input class="vol-display" type="text"
+                 value="${t.v.toLocaleString('pt-BR')}"
+                 onblur="fmtCombVol(this,${sIdx},${i})"
+                 onfocus="this.value=this.value.replace(/\\./g,'')"
+                 onkeydown="if(event.key==='Enter')this.blur()"></td>
+            <td><input class="num-inp" type="number" value="${t['1500ml']||0}" min="0" max="100" step="0.5"
+                 style="color:#1d4ed8;font-weight:700" onchange="updCombTier(${sIdx},${i},'1500ml',this.value)"></td>
+            <td><input class="num-inp" type="number" value="${t['5L']||0}" min="0" max="100" step="0.5"
+                 style="color:#1d4ed8;font-weight:700" onchange="updCombTier(${sIdx},${i},'5L',this.value)"></td>
+            <td><input class="num-inp" type="number" value="${t['Demais']||0}" min="0" max="100" step="0.5"
+                 style="color:#1d4ed8;font-weight:700" onchange="updCombTier(${sIdx},${i},'Demais',this.value)"></td>
+            <td><button class="del-btn" onclick="delCombTier(${sIdx},${i})">✕</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <button class="add-tier-btn" onclick="addCombTier(${sIdx})">+ Adicionar faixa</button>
+    <div class="vol-hint">
+      Vol. combinado ${mode==='acumulado'?'acumulado':'médio mensal'}: <strong>${fmt(Math.round(refVol))} un.</strong>
+      &nbsp;→&nbsp;
+      ${hitIdx>=0
+        ? `<strong>1500ml: ${tiers[hitIdx]['1500ml']}% · 5L: ${tiers[hitIdx]['5L']}% · Demais: ${tiers[hitIdx]['Demais']}%</strong>`
+        : '<span class="muted">Abaixo da 1ª faixa (sem desconto)</span>'}
+    </div>`;
+}
+function fmtCombVol(el, sIdx, i) {
+  const raw = parseFloat(el.value.replace(/\./g,'').replace(',','.')) || 0;
+  scenarios[sIdx].combinedEscala[i].v = raw;
+  el.value = raw.toLocaleString('pt-BR');
+  renderEditor(); run(); markDirty();
+}
+function updCombTier(sIdx, i, cat, val) {
+  scenarios[sIdx].combinedEscala[i][cat] = parseFloat(val)||0;
+  renderEditor(); run(); markDirty();
+}
+function delCombTier(sIdx, i) {
+  scenarios[sIdx].combinedEscala.splice(i,1);
+  renderEditor(); run(); markDirty();
+}
+function addCombTier(sIdx) {
+  const t = scenarios[sIdx].combinedEscala;
+  const last = t.length ? t[t.length-1] : {v:150000,'1500ml':11,'5L':11,'Demais':6};
+  t.push({ v: last.v+25000, '1500ml': last['1500ml'], '5L': last['5L'], 'Demais': last['Demais'] });
+  renderEditor(); run(); markDirty();
 }
 
 // ============================================================
@@ -1335,29 +1439,40 @@ function run() {
       productData[cat][row.produto].total += vol;
       productData[cat][row.produto].byMonth[row.data] = (productData[cat][row.produto].byMonth[row.data] || 0) + vol;
     });
+    const combVolAcum = COMBINED_CATS.reduce((s,c) => s + catVol[c], 0);
     CATS.forEach(c => {
-      catDesc[c] = catRev[c] * getDiscount(c, catVol[c]);
+      catDesc[c] = catRev[c] * (COMBINED_CATS.includes(c)
+        ? getCombinedDiscount(c, combVolAcum)
+        : getDiscount(c, catVol[c]));
     });
   } else {
     months.forEach(m => {
       const mRows = data.filter(d => d.data===m);
+      // Pass 1: vol + rev
       CATS.forEach(c => {
         const rows = mRows.filter(d => d.classif === c);
         const vol = rows.reduce((s,d) => s + d.volume * gMult, 0);
         const rev = rows.reduce((s,d) => {
           return s + d.volume * gMult * (d.classifNova ? (precosCat[d.classifNova] || 0) * icmsMult : 0);
         }, 0);
-        const desc = rev * getDiscount(c, vol);
-        monthlyData[m][c] = {vol, rev, desc};
-        catVol[c]  += vol;
-        catRev[c]  += rev;
-        catDesc[c] += desc;
+        monthlyData[m][c] = {vol, rev, desc: 0};
+        catVol[c] += vol;
+        catRev[c] += rev;
         rows.forEach(d => {
           if (!productData[c][d.produto]) productData[c][d.produto] = {total: 0, byMonth: {}};
           const v = d.volume * gMult;
           productData[c][d.produto].total += v;
           productData[c][d.produto].byMonth[m] = (productData[c][d.produto].byMonth[m] || 0) + v;
         });
+      });
+      // Pass 2: desc (combined vol para 1500ml+5L+Demais)
+      const mCombVol = COMBINED_CATS.reduce((s,c) => s + monthlyData[m][c].vol, 0);
+      CATS.forEach(c => {
+        const pct = COMBINED_CATS.includes(c)
+          ? getCombinedDiscount(c, mCombVol)
+          : getDiscount(c, monthlyData[m][c].vol);
+        monthlyData[m][c].desc = monthlyData[m][c].rev * pct;
+        catDesc[c] += monthlyData[m][c].desc;
       });
     });
   }
@@ -1839,11 +1954,16 @@ function renderWhatIf() {
     const aDemais = calcCat(md, d => d.classif === 'Demais');
     const b500    = calcCat(md, d => d.classif === '500ml' && !WHAT_IF_NOVAS.has(d.classifNova));
     const bDemais = calcCat(md, d => d.classif === 'Demais' || (d.classif === '500ml' && WHAT_IF_NOVAS.has(d.classifNova)));
+    // Volume de 1500ml + 5L (igual nos dois cenários)
+    const restVol = ['1500ml','5L'].reduce((s,c) => s + md.filter(d=>d.classif===c).reduce((ss,d)=>ss+d.volume*gMult,0), 0);
+    const combVolA = restVol + aDemais.vol;
+    const combVolB = restVol + bDemais.vol;
 
-    [a500, b500].forEach(x => { x.pct = getDiscount('500ml',   x.vol); x.descR = x.rev * x.pct; x.tier = activeTierIdx('500ml',   x.vol); });
-    [aDemais, bDemais].forEach(x => { x.pct = getDiscount('Demais', x.vol); x.descR = x.rev * x.pct; x.tier = activeTierIdx('Demais', x.vol); });
+    [a500, b500].forEach(x => { x.pct = getDiscount('500ml', x.vol); x.descR = x.rev * x.pct; x.tier = activeTierIdx('500ml', x.vol); });
+    aDemais.pct = getCombinedDiscount('Demais', combVolA); aDemais.descR = aDemais.rev * aDemais.pct; aDemais.combTier = activeCombinedTierIdx(combVolA);
+    bDemais.pct = getCombinedDiscount('Demais', combVolB); bDemais.descR = bDemais.rev * bDemais.pct; bDemais.combTier = activeCombinedTierIdx(combVolB);
 
-    return { m, a500, aDemais, b500, bDemais };
+    return { m, a500, aDemais, b500, bDemais, restVol };
   });
 
   // Accumulated totals (for escala section)
@@ -1852,7 +1972,10 @@ function renderWhatIf() {
     vol500B:    rows.reduce((s,r) => s + r.b500.vol,    0),
     volDemaisA: rows.reduce((s,r) => s + r.aDemais.vol, 0),
     volDemaisB: rows.reduce((s,r) => s + r.bDemais.vol, 0),
+    volRest:    rows.reduce((s,r) => s + r.restVol,     0),
   };
+  tot.combVolA = tot.volRest + tot.volDemaisA;
+  tot.combVolB = tot.volRest + tot.volDemaisB;
 
   // ── helpers ──
   const th = (t,extra='') => `<th style="padding:5px 8px;font-size:10px;color:#64748b;font-weight:600;text-align:right;white-space:nowrap${extra}">${t}</th>`;
@@ -1937,10 +2060,10 @@ function renderWhatIf() {
   const tfootDemais = `<tr style="background:#ede9fe;font-weight:700">
     ${tdL('<b>Total</b>')}
     ${td(fmt(Math.round(tot.volDemaisA)), ';border-left:2px solid #e9d5ff')}
-    ${td(pctStr(getDiscount('Demais', tot.volDemaisA)))}
+    ${td(pctStr(getCombinedDiscount('Demais', tot.combVolA)))}
     ${td(R(rows.reduce((s,r)=>s+r.aDemais.descR,0)))}
     ${td(fmt(Math.round(tot.volDemaisB)), ';border-left:2px solid #e2e8f0')}
-    ${td(pctStr(getDiscount('Demais', tot.volDemaisB)))}
+    ${td(pctStr(getCombinedDiscount('Demais', tot.combVolB)))}
     ${td(R(rows.reduce((s,r)=>s+r.bDemais.descR,0)))}
     ${td(fmt(Math.round(tot.volDemaisA-tot.volDemaisB)), ';border-left:2px solid #e2e8f0'+diffStyle(tot.volDemaisA-tot.volDemaisB))}
     ${td(R(rows.reduce((s,r)=>s+r.aDemais.descR-r.bDemais.descR,0)), diffStyle(rows.reduce((s,r)=>s+r.aDemais.descR-r.bDemais.descR,0)))}
@@ -1983,6 +2106,49 @@ function renderWhatIf() {
     </div>`;
   }
 
+  // Tabela comparativa da escala combinada (1500ml+5L+Demais) para o what-if
+  function combinedEscalaTableWhatIf(combVolA, combVolB) {
+    const tiers = scenarios[0].combinedEscala || [];
+    const tierA = activeCombinedTierIdx(combVolA);
+    const tierB = activeCombinedTierIdx(combVolB);
+    const tRows = tiers.map((t,i) => {
+      const isA = i === tierA, isB = i === tierB;
+      const bg = isA && isB ? 'background:#dcfce7' : isA ? 'background:#dbeafe' : isB ? 'background:#fef9c3' : '';
+      const badge = isA && isB ? ' <span style="font-size:9px;background:#16a34a;color:#fff;padding:1px 4px;border-radius:3px">A e B</span>'
+                  : isA       ? ' <span style="font-size:9px;background:#1d4ed8;color:#fff;padding:1px 4px;border-radius:3px">Atual</span>'
+                  : isB       ? ' <span style="font-size:9px;background:#ca8a04;color:#fff;padding:1px 4px;border-radius:3px">Sem Reclassif</span>'
+                  : '';
+      const fw = isA||isB ? '700' : '400';
+      return `<tr style="${bg}">
+        <td style="padding:4px 8px;font-size:11px">Faixa ${i+1}${badge}</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right">≥ ${fmt(t.v)}</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right;font-weight:${fw}">1500ml: ${t['1500ml']}%</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right;font-weight:${fw}">5L: ${t['5L']}%</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right;font-weight:${fw}">Demais: ${t['Demais']}%</td>
+      </tr>`;
+    }).join('');
+    const pctA = tierA>=0 ? `Demais ${tiers[tierA]['Demais']}%` : 'sem desconto';
+    const pctB = tierB>=0 ? `Demais ${tiers[tierB]['Demais']}%` : 'sem desconto';
+    return `<div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:4px">Vol. combinado (1500ml + 5L + Demais) determina a faixa</div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+        <thead><tr style="background:#f8fafc">
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#0f172a;font-weight:700">Faixa</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:#0f172a;font-weight:700">Vol. mín.</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:#1d4ed8;font-weight:700">1500ml</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:#92400e;font-weight:700">5L</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:#7e22ce;font-weight:700">Demais</th>
+        </tr></thead>
+        <tbody>${tRows}</tbody>
+      </table>
+      <div style="margin-top:6px;font-size:10px;color:#64748b">
+        Atual (A): combinado <b>${fmt(Math.round(combVolA))}</b> unid. → <b style="color:#1d4ed8">${pctA}</b>
+        &nbsp;|&nbsp;
+        Sem reclassif (B): combinado <b>${fmt(Math.round(combVolB))}</b> unid. → <b style="color:#ca8a04">${pctB}</b>
+      </div>
+    </div>`;
+  }
+
   // ── Assemble ──
   const tblStyle = 'width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:12px';
   document.getElementById('whatIfContent').innerHTML = `
@@ -2012,15 +2178,13 @@ function renderWhatIf() {
     </table></div>
 
     <h3 style="font-size:13px;font-weight:700;color:#0f172a;margin:24px 0 10px">Escala de Desconto — Comparativo (volume acumulado dos meses selecionados)</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-      <div>
-        <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px">500ml</div>
-        ${escalaTable('500ml', tot.vol500A, tot.vol500B, '#1d4ed8', '#eff6ff')}
-      </div>
-      <div>
-        <div style="font-size:12px;font-weight:700;color:#7e22ce;margin-bottom:6px">Demais</div>
-        ${escalaTable('Demais', tot.volDemaisA, tot.volDemaisB, '#7e22ce', '#faf5ff')}
-      </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px">500ml</div>
+      ${escalaTable('500ml', tot.vol500A, tot.vol500B, '#1d4ed8', '#eff6ff')}
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:6px">1500ml · 5L · Demais — escala combinada</div>
+      ${combinedEscalaTableWhatIf(tot.combVolA, tot.combVolB)}
     </div>
   `;
 }
