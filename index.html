@@ -890,9 +890,9 @@ let lastCalc   = { catVol:{}, catRev:{}, catDesc:{}, months:[], nMonths:0 };
 // ============================================================
 // SUPABASE
 // ============================================================
-const SUPA_URL = 'https://skdkitflogcunbqikcre.supabase.co';
-const SUPA_KEY = 'sb_publishable_47tScPKHHChf073YH3rosw_QVVJeQed';
-const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+const SUPA_URL = 'https://nsvrafhxoktkdqiggipr.supabase.co';
+const SUPA_KEY = 'sb_publishable_P8OfNC_gU8QJKX87OK-f2w_JizavsXy';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY, { db: { schema: 'jvm4' } });
 
 async function loadFromSupabase() {
   showSaveStatus('loading');
